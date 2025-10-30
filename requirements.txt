@@ -5,6 +5,7 @@ pydantic
 python-dotenv
 httpx[http2]
 requests
+tenacity
 
 # --- Data / Analytics ---
 numpy

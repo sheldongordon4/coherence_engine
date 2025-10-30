@@ -1,190 +1,222 @@
-# 🧠 Data Coherence Engine v0.1
+# 🧠 Coherence Engine
 
-**Author:** Sheldon H. Gordon  
-**Project:** Coherence Protocol – Agentic AI Systems Engineer  
-**Purpose:** Build the analytics backbone that computes coherence metrics from Darshan’s `/signals/summary` API and exposes interpretable JSON endpoints.
+A lightweight **Data Coherence Engine** that ingests signal data from Darshan’s API (or mock JSON), computes transparent coherence metrics, and exposes them via a **FastAPI** service — with an optional **Streamlit** dashboard for internal verification.
 
 ---
 
 ## 🚀 Overview
-The **Data Coherence Engine** powers the core analytics of Coherence Protocol’s multi-agent system. It ingests signal summaries, computes coherence and drift metrics, and serves clean JSON for downstream dashboards.
 
-### Core Tasks
-1️⃣ **Ingest and Process Data**
-- Pull from `/signals/summary` (or use mock JSON for testing).
-- Parse fields like `coherenceScore`, `agentStates`, `eventCount`.
+The **Coherence Engine** processes signal summaries from the `/signals/summary` endpoint and computes key metrics that quantify data stability and drift over time.  
+It emphasizes **traceability**, **interpretability**, and **modular design** — every computed value can be traced back to its raw input.
 
-2️⃣ **Compute Metrics**
-- `coherenceMean` (rolling average)
-- `volatilityIndex` (stdev / mean)
-- `predictedDriftRisk` (rule-based classifier)
+### Core Features
 
-3️⃣ **Expose API Endpoints**
-- `GET /coherence/metrics` → returns latest summary JSON
-- `GET /coherence/predict` → drift risk forecast
-
-4️⃣ **Optional**
-- Streamlit dashboard for verification.
-- Local CSV or SQLite persistence.
+- **Data Ingestion:** Pulls data from Darshan’s `/signals/summary` endpoint (or a mock JSON file).
+- **Metrics Computation:**
+  - `coherenceMean` – rolling average  
+  - `volatilityIndex` – standard deviation / mean  
+  - `predictedDriftRisk` – simple rule-based classifier (`low`, `medium`, `high`)
+- **API Endpoints:**
+  - `GET /coherence/metrics` → returns current summary  
+  - `GET /coherence/predict` → returns drift risk forecast  
+  - `GET /health`, `GET /status` → diagnostics  
+- **Persistence Layer:** Local CSV or SQLite for rolling data storage.  
+- **Streamlit Dashboard:** Visual verification of coherence metrics over time.
 
 ---
 
-## ⚙️ Tech Stack
-| Component | Technology |
-|------------|-------------|
-| API Service | FastAPI or Flask |
-| Data | Pandas, NumPy |
-| Rule-based Classifier | Scikit-learn (light usage) |
-| Visualization | Streamlit |
-| Persistence | CSV or SQLite |
-| Containerization | Docker |
+## 🧩 Folder Structure
+
+```
+coherence_engine/
+│
+├── .env
+├── Makefile
+├── requirements.txt
+├── rolling_store.csv
+│
+├── app/
+│   ├── __init__.py
+│   ├── api.py
+│   ├── schemas.py
+│   │
+│   ├── compute/
+│   │   └── metrics.py
+│   │
+│   ├── persistence/
+│   │   ├── __init__.py
+│   │   ├── csv_store.py
+│   │   ├── base.py
+│   │   └── sqlite_store.py
+│   │
+│   └── ingest/
+│       └── darshan_client.py
+│
+├── data/
+│   └── mock_signals.json
+│
+├── streamlit_app/
+│   └── app.py
+│
+└── tests/
+```
 
 ---
 
-## 🧩 Installation & Setup
+## ⚙️ Quick Start
 
-### 1. Clone the Repository
+### 1️⃣ Clone & Setup
+
 ```bash
-git clone https://github.com/<your-username>/data-coherence-engine.git
-cd data-coherence-engine
+git clone https://github.com/<your-username>/coherence_engine.git
+cd coherence_engine
+make install
 ```
 
-### 2. Create a Virtual Environment
-```bash
-python -m venv venv
-source venv/bin/activate      # On Windows: venv\Scripts\activate
-```
+Or manually:
 
-### 3. Install Dependencies
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
 ---
 
-## 🔧 Configuration
+### 2️⃣ Environment Configuration
 
-Create a `.env` file or export environment variables manually:
+Create a `.env` file in the root (example below):
 
 ```bash
-DARSHAN_BASE_URL=https://api.example.com
-DARSHAN_API_KEY=<your_token>
-DEFAULT_WINDOW_SEC=3600
-ENGINE_VERSION=0.1.0
-PERSISTENCE=csv      # options: none | csv | sqlite
-```
-
-For **mock mode** (no API connection):
-```bash
-MOCK_PATH=./sample_summary.json
+DARSHAN_BASE_URL=https://api.darshan.ai/v1
+DARSHAN_MODE=mock
+MOCK_PATH=/app/data/mock_signals.json
+DARSHAN_TIMEOUT_S=5
+PERSIST_PATH=/data
+DEFAULT_WINDOWS=1h,24h
 ```
 
 ---
 
-## ▶️ Run the Service
+### 3️⃣ Run the API
 
-### Option 1 — Local Development
 ```bash
-uvicorn app:app --reload --port 8000
-```
-Then open: [http://localhost:8000/docs](http://localhost:8000/docs)
-
-### Option 2 — Docker
-```bash
-docker build -t data-coherence-engine:0.1 .
-docker run -p 8000:8000 --env-file .env data-coherence-engine:0.1
+make run
 ```
 
----
+or directly:
 
-## 🔍 API Endpoints
+```bash
+uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
+```
 
-### ✅ Health Check
+Check endpoints:
+
 ```bash
 curl http://localhost:8000/health
-```
-Response:
-```json
-{"status": "ok", "version": "0.1.0"}
+curl http://localhost:8000/coherence/metrics?window=3600
 ```
 
-### 📈 Coherence Metrics
+---
+
+### 4️⃣ Run the Streamlit Dashboard (Optional)
+
 ```bash
-curl "http://localhost:8000/coherence/metrics?window=3600"
+make streamlit
 ```
-Response:
+
+Or manually:
+
+```bash
+API_BASE="http://localhost:8000" streamlit run streamlit_app/app.py
+```
+
+---
+
+## 🐳 Docker Usage
+
+### Build the API image
+
+```bash
+docker build -t coherence-api --target api .
+```
+
+Run the API container:
+
+```bash
+docker run --name coherence-api   --env-file .env   -e PERSIST_PATH=/data   -e DARSHAN_MODE=mock   -e MOCK_PATH=/app/data/mock_signals.json   -p 8000:8000   -v "$(pwd)/data:/data"   coherence-api
+```
+
+### Build the Streamlit image
+
+```bash
+docker build -t coherence-streamlit --target streamlit .
+docker run -p 8501:8501   -e API_BASE="http://host.docker.internal:8000"   coherence-streamlit
+```
+
+---
+
+## 🧮 Example Output
+
+Example `/coherence/metrics` response:
+
 ```json
 {
-  "coherenceMean": 86,
+  "coherenceMean": 86.0,
   "volatilityIndex": 0.14,
   "predictedDriftRisk": "low",
-  "timestamp": "2025-10-28T17:43:00Z"
+  "timestamp": "2025-10-28T17:43:00Z",
+  "windowSec": 86400,
+  "n": 120,
+  "meta": {
+    "method": "rolling mean/stdev",
+    "latency_ms": 1.2
+  }
 }
-```
-
-### 🔮 Drift Prediction
-```bash
-curl "http://localhost:8000/coherence/predict"
-```
-
----
-
-## 📊 Optional Streamlit Dashboard
-Run a simple verification dashboard:
-```bash
-API_BASE="http://localhost:8000" streamlit run streamlit_app.py
-```
-View charts and metrics interactively.
-
----
-
-## 🧱 Project Structure
-```
-data-coherence-engine/
-├── app.py
-├── streamlit_app.py
-├── requirements.txt
-├── README.md
-├── sample_summary.json
-├── tests/
-│   ├── test_metrics.py
-│   └── test_api.py
-└── rolling_store.csv (optional)
 ```
 
 ---
 
 ## 🧪 Testing
+
+Run all tests:
+
+```bash
+make test
+```
+
+Or with `pytest` directly:
+
 ```bash
 pytest -v
 ```
 
 ---
 
-## 🧭 Notes
-- A **new branch must be created for each new feature** and deleted after PR review and merge.
-- Focus: **clarity, interpretability, and trustworthy data** — no overfitting.
-- Extendable to PSI, KS drift detection, and model-based risk prediction in later versions.
+## 🧰 Makefile Commands
+
+| Command | Description |
+|----------|--------------|
+| `make install` | Set up the virtual environment and install dependencies |
+| `make run` | Run FastAPI locally via Uvicorn |
+| `make test` | Run all pytest tests |
+| `make lint` | Lint code with Pylint and Black |
+| `make format` | Auto-format code with Black |
+| `make streamlit` | Run the Streamlit dashboard |
+| `make clean` | Remove the virtual environment and temp files |
 
 ---
 
+## 🧠 Design Notes
+
+- **Transparency:** Every metric is computed via human-readable formulas; no hidden models.  
+- **Traceability:** Each metric result includes the computation method, timestamp, and source.  
+- **Resilience:** Ingestion layer supports mock data fallback and retry logic.  
+- **Extensibility:** Metrics module and persistence layer are modular and easily replaceable.
 
 ---
 
-## 🧼 Linting & Formatting
+## 🧾 License
 
-Run non-destructive checks:
-```bash
-make lint
-```
-
-Auto-format the codebase (destructive):
-```bash
-make format
-```
-
-Configuration lives in `pyproject.toml` (Black & Ruff). The recommended line length is **100** and the target Python version is **3.11**.
-
-
-## 📄 License
-MIT License © 2025 Sheldon H. Gordon
+MIT License © 2025 [Your Name or Organization]  
+Feel free to fork, extend, or integrate into your own data coherence systems.

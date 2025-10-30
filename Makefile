@@ -41,7 +41,7 @@ run:
 	$(ACTIVATE) uvicorn app.api:app --host $(APP_HOST) --port $(APP_PORT) --reload
 
 streamlit:
-	$(ACTIVATE) API_BASE="http://localhost:$(APP_PORT)" streamlit run streamlit_app/app.py
+	$(ACTIVATE) API_BASE="http://localhost:8000" streamlit run streamlit_app/app.py
 
 # -----------------------------------------------------------------------------
 # Testing & Quality

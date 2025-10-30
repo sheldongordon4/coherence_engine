@@ -39,25 +39,26 @@ def basic_stats(values: List[float]) -> BasicStats:
     sigma = _stdev(values, mu, n)
     return BasicStats(mean=mu, stdev=sigma, n=n)
 
-# Rule-based risk (tune later if needed):
-# High:   stdev > 0.25 or mean < 60
-# Medium: 0.10 < stdev <= 0.25 or 60 <= mean < 80
-# Low:    stdev <= 0.10 and mean >= 80
-def classify_risk(mean: float, stdev: float) -> str:
-    if stdev > 0.25 or mean < 60:
-        return "high"
-    if (0.10 < stdev <= 0.25) or (60 <= mean < 80):
-        return "medium"
-    return "low"
+# Rule-based risk:
+def classify_risk(mean: float, vol_idx: float) -> Literal["low","medium","high"]:
+    if vol_idx < 0.2:  return "low"
+    if vol_idx < 0.5:  return "medium"
+    return "high"
 
 def compute_metrics(values: List[float], window_sec: int, source: str = "darshan_api") -> dict:
     t0 = time.perf_counter()
     stats = basic_stats(values)
-    risk = classify_risk(stats.mean, stats.stdev)
+    if abs(stats.mean) < 1e-12:
+        vol_idx = 0.0
+    else:
+        vol_idx = stats.stdev / abs(stats.mean)
+    
+    risk = classify_risk(stats.mean, vol_idx)
     latency_ms = round((time.perf_counter() - t0) * 1000, 3)
+    
     return {
         "coherenceMean": round(stats.mean, 6),
-        "volatilityIndex": round(stats.stdev, 6),
+        "volatilityIndex": round(vol_idx, 6),
         "predictedDriftRisk": risk,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "windowSec": int(window_sec),
@@ -65,3 +66,4 @@ def compute_metrics(values: List[float], window_sec: int, source: str = "darshan
         "inputs": {"source": source},
         "meta": {"method": "mean/stdev rule-based", "latency_ms": latency_ms},
     }
+

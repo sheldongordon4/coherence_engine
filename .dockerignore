@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+*.sqlite*
+*.db
+/data/
+rolling_store.csv
+tests/
+.git/
+.DS_Store
