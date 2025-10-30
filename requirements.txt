@@ -3,7 +3,7 @@ fastapi
 uvicorn
 pydantic
 python-dotenv
-httpx
+httpx[http2]
 requests
 
 # --- Data / Analytics ---
@@ -22,6 +22,7 @@ sqlalchemy
 # --- Testing ---
 pytest
 pytest-asyncio
+pytest-httpx
 
 # --- Code Quality ---
 black

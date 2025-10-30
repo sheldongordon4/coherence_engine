@@ -1,16 +1,22 @@
-from pydantic import BaseModel
-from typing import Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, Field
 
-class HealthResponse(BaseModel):
-    status: str
-    version: str
+class DarshanSignalSummary(BaseModel):
+    timestamp: datetime
+    signal_id: str = Field(..., alias="signal_id")
+    coherenceScore: float
+    agentStates: Dict[str, Any]
+    eventCount: int
 
-class StatusResponse(BaseModel):
-    status: str
-    version: str
-    uptime_sec: float
-    start_time: str
-    now: str
-    default_windows: str
-    persistence: str
-    notes: Optional[str] = None
+class DarshanPage(BaseModel):
+    data: List[DarshanSignalSummary]
+    next_page: Optional[str] = None
+
+class IngestStatus(BaseModel):
+    source: str
+    last_ingest_time: Optional[datetime] = None
+    last_latency_ms: Optional[int] = None
+    last_record_count: int = 0
+    pages_fetched: int = 0
+    retries: int = 0
