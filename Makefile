@@ -9,6 +9,11 @@ APP_PORT := 8000
 ENV_EXAMPLE := .env.example
 ENV_FILE := .env
 
+export PERSISTENCE ?= csv
+export CSV_PATH ?= rolling_store.csv
+export SQLITE_PATH ?= rolling_store.db
+
+
 .PHONY: install run test lint format clean streamlit env health status deps dev-freeze ingest
 
 # -----------------------------------------------------------------------------
@@ -44,6 +49,9 @@ streamlit:
 
 test:
 	$(ACTIVATE) pytest -v
+
+test-persistence:
+	$(ACTIVATE) pytest -q tests/test_persistence.py tests/test_history_api.py
 
 lint:
 	$(ACTIVATE) black --check .

@@ -1,7 +1,7 @@
 # app/api.py
 import os
-import random
 import json
+import random
 from datetime import datetime, timezone
 from typing import Optional, List, Any
 from contextlib import asynccontextmanager
@@ -10,41 +10,50 @@ from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# --- local imports
-from app.schemas import IngestStatus, MetricsResponse
+from app.schemas import IngestStatus, MetricsResponse, MetricsRecord
 from app.compute.metrics import compute_metrics
-from app.schemas import IngestStatus
+from app.persistence.csv_store import CsvMetricsStore
+from app.persistence.sqlite_store import SqliteMetricsStore
 
 load_dotenv()
 
+# --- add helper ---
+def _as_metrics_response(obj) -> "MetricsResponse":
+    # works whether compute_metrics returns a dict or a MetricsResponse
+    from app.schemas import MetricsResponse as _MR
+    if isinstance(obj, _MR):
+        return obj
+    if isinstance(obj, dict):
+        return _MR(**obj)
+    # last resort: let pydantic coerce
+    return _MR.model_validate(obj)  # pydantic v2-safe
+
 # -------------------------
-# FastAPI app + constants
+# Constants / env
 # -------------------------
-app = FastAPI()
 ENGINE_VERSION = os.getenv("ENGINE_VERSION", "0.1.0")
+PERSISTENCE = os.getenv("PERSISTENCE", "none")  # csv | sqlite | none
+CSV_PATH = os.getenv("CSV_PATH", "rolling_store.csv")
+SQLITE_PATH = os.getenv("SQLITE_PATH", "rolling_store.db")
 START_TIME = datetime.now(timezone.utc)
 
-# Support both DEFAULT_WINDOW (singular) and legacy DEFAULT_WINDOWS (first value)
+# Support DEFAULT_WINDOW (preferred) or first of DEFAULT_WINDOWS
 _DEFAULT_WINDOW = os.getenv("DEFAULT_WINDOW")
 if not _DEFAULT_WINDOW:
-    # fallback to first of DEFAULT_WINDOWS if provided, else 1h
     _DEFAULT_WINDOW = (os.getenv("DEFAULT_WINDOWS", "1h,24h").split(",")[0]).strip() or "1h"
 
 # -------------------------
-# Status schema (existing)
+# Persistence
 # -------------------------
-class StatusResponse(BaseModel):
-    status: str
-    version: str
-    uptime_sec: float
-    start_time: str
-    now: str
-    default_windows: str
-    persistence: str
-    ingest: IngestStatus
+if PERSISTENCE == "csv":
+    store = CsvMetricsStore(CSV_PATH)
+elif PERSISTENCE == "sqlite":
+    store = SqliteMetricsStore(SQLITE_PATH)
+else:
+    store = None
 
-## -------------------------
-# Ingestion bootstrap (lazy)
+# -------------------------
+# Lifespan (lazy ingestion client init)
 # -------------------------
 _client: Optional[Any] = None
 _ingest_status = IngestStatus(
@@ -58,9 +67,6 @@ _ingest_status = IngestStatus(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Lazy init ingestion client (M3 optional). If import fails, keep API running.
-    """
     global _client
     try:
         from app.ingest.darshan_client import DarshanClient  # type: ignore
@@ -74,85 +80,18 @@ async def lifespan(app: FastAPI):
     except Exception:
         _client = None
 
-    # yield control to the app
+    if store:
+        store.init()
+
     yield
 
-    # optional: graceful shutdown hooks here
     _client = None
 
-# initialize app with lifespan
-app = FastAPI(lifespan=lifespan)
-
-@app.get("/ingest/run")
-async def run_ingest(start_ts: Optional[str] = None, end_ts: Optional[str] = None):
-    if _client is None:
-        raise HTTPException(status_code=503, detail="Ingestion client unavailable (M3 not wired).")
-    global _ingest_status
-    records, meta = await _client.fetch_summary(start_ts=start_ts, end_ts=end_ts)
-    _ingest_status = IngestStatus(
-        source="mock" if os.getenv("MOCK_PATH") else "darshan_api",
-        last_ingest_time=datetime.now(timezone.utc),
-        last_latency_ms=meta.get("latency_ms"),
-        last_record_count=len(records),
-        pages_fetched=meta.get("pages_fetched", 0),
-        retries=meta.get("retries", 0),
-    )
-    return {
-        "ok": True,
-        "records": len(records),
-        "latency_ms": meta.get("latency_ms"),
-        "pages_fetched": meta.get("pages_fetched"),
-        "retries": meta.get("retries"),
-    }
+# Single app instance
+app = FastAPI(title="Coherence Engine", version=ENGINE_VERSION, lifespan=lifespan)
 
 # -------------------------
-# Health + Status (existing)
-# -------------------------
-@app.get("/health")
-def health():
-    return {"status": "ok", "version": ENGINE_VERSION}
-
-@app.get("/status", response_model=StatusResponse)
-def status():
-    now = datetime.now(timezone.utc)
-    return StatusResponse(
-        status="ok",
-        version=ENGINE_VERSION,
-        uptime_sec=(now - START_TIME).total_seconds(),
-        start_time=START_TIME.isoformat(),
-        now=now.isoformat(),
-        default_windows=os.getenv("DEFAULT_WINDOWS", "1h,24h"),
-        persistence=os.getenv("PERSISTENCE", "none"),
-        ingest=_ingest_status,
-    )
-
-# -------------------------
-# Manual ingest (existing)
-# -------------------------
-@app.get("/ingest/run")
-async def run_ingest(start_ts: Optional[str] = None, end_ts: Optional[str] = None):
-    global _ingest_status
-    assert _client is not None, "Client not initialized"
-
-    records, meta = await _client.fetch_summary(start_ts=start_ts, end_ts=end_ts)
-    _ingest_status = IngestStatus(
-        source="mock" if os.getenv("MOCK_PATH") else "darshan_api",
-        last_ingest_time=datetime.now(timezone.utc),
-        last_latency_ms=meta.get("latency_ms"),
-        last_record_count=len(records),
-        pages_fetched=meta.get("pages_fetched", 0),
-        retries=meta.get("retries", 0),
-    )
-    return {
-        "ok": True,
-        "records": len(records),
-        "latency_ms": meta.get("latency_ms"),
-        "pages_fetched": meta.get("pages_fetched"),
-        "retries": meta.get("retries"),
-    }
-
-# -------------------------
-# M2: Coherence metrics
+# Helpers
 # -------------------------
 def parse_window(window: str) -> int:
     w = window.strip().lower()
@@ -167,9 +106,8 @@ def parse_window(window: str) -> int:
     raise HTTPException(status_code=400, detail="Invalid window format. Use 30s, 5m, 1h, etc.")
 
 def _mock_series(n: int = 120, center: float = 82.0, jitter: float = 0.06) -> List[float]:
-    """Generate a bounded [0,100] synthetic series."""
     vals = []
-    val = center / 100.0  # work in 0..1 then scale
+    val = center / 100.0
     for _ in range(n):
         val += random.uniform(-jitter, jitter) * 0.2
         val = max(0.0, min(1.0, val))
@@ -187,18 +125,71 @@ def _get_values(source: str) -> List[float]:
         if mock_path and os.path.exists(mock_path):
             try:
                 vals = _load_from_mock_path(mock_path)
-                # Fallback if the file exists but is empty / missing the key
                 if vals:
                     return vals
             except Exception:
                 pass
-        # Always provide a non-empty synthetic series as a safe default
         return _mock_series()
-
     if source == "darshan_api":
+        # placeholder until real API ingestion wires in
         return _mock_series(center=74.0, jitter=0.12)
-
     raise HTTPException(status_code=400, detail=f"Unknown source '{source}'")
+
+# -------------------------
+# Schemas for /status
+# -------------------------
+class StatusResponse(BaseModel):
+    status: str
+    version: str
+    uptime_sec: float
+    start_time: str
+    now: str
+    default_windows: str
+    persistence: str
+    ingest: IngestStatus
+
+# -------------------------
+# Routes
+# -------------------------
+@app.get("/health")
+def health():
+    return {"status": "ok", "version": ENGINE_VERSION}
+
+@app.get("/status", response_model=StatusResponse)
+def status():
+    now = datetime.now(timezone.utc)
+    return StatusResponse(
+        status="ok",
+        version=ENGINE_VERSION,
+        uptime_sec=(now - START_TIME).total_seconds(),
+        start_time=START_TIME.isoformat(),
+        now=now.isoformat(),
+        default_windows=os.getenv("DEFAULT_WINDOWS", "1h,24h"),
+        persistence=PERSISTENCE if store else "none",
+        ingest=_ingest_status,
+    )
+
+@app.get("/ingest/run")
+async def run_ingest(start_ts: Optional[str] = None, end_ts: Optional[str] = None):
+    if _client is None:
+        raise HTTPException(status_code=503, detail="Ingestion client unavailable (not initialized).")
+    global _ingest_status
+    records, meta = await _client.fetch_summary(start_ts=start_ts, end_ts=end_ts)
+    _ingest_status = IngestStatus(
+        source="mock" if os.getenv("MOCK_PATH") else "darshan_api",
+        last_ingest_time=datetime.now(timezone.utc),
+        last_latency_ms=meta.get("latency_ms"),
+        last_record_count=len(records),
+        pages_fetched=meta.get("pages_fetched", 0),
+        retries=meta.get("retries", 0),
+    )
+    return {
+        "ok": True,
+        "records": len(records),
+        "latency_ms": meta.get("latency_ms"),
+        "pages_fetched": meta.get("pages_fetched"),
+        "retries": meta.get("retries"),
+    }
 
 @app.get("/coherence/metrics", response_model=MetricsResponse)
 async def get_coherence_metrics(
@@ -209,4 +200,28 @@ async def get_coherence_metrics(
     values = _get_values(source)
     if not values:
         raise HTTPException(status_code=422, detail="No values available for the requested source/window.")
-    return compute_metrics(values=values, window_sec=window_sec, source=source)
+
+    raw = compute_metrics(values=values, window_sec=window_sec, source=source)
+    metrics: MetricsResponse = _as_metrics_response(raw)
+
+    if store:
+        rec = MetricsRecord(
+            ts_utc=metrics.timestamp,
+            window_sec=metrics.windowSec,
+            n=metrics.n,
+            mean=metrics.coherenceMean,
+            stdev=metrics.volatilityIndex,
+            drift_risk=metrics.predictedDriftRisk,
+            source=metrics.inputs.get("source", "darshan_api"),
+            request_id=metrics.meta.get("request_id"),
+        )
+        print("M3 saving:", rec.model_dump())  # quick log
+        store.save(rec)
+
+    return metrics
+
+@app.get("/coherence/history", response_model=List[MetricsRecord])
+def coherence_history(limit: int = Query(50, ge=1, le=1000)):
+    if not store:
+        return []
+    return store.read_latest(limit=limit)
