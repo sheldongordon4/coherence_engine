@@ -168,5 +168,23 @@ pytest -v
 
 ---
 
+
+---
+
+## 🧼 Linting & Formatting
+
+Run non-destructive checks:
+```bash
+make lint
+```
+
+Auto-format the codebase (destructive):
+```bash
+make format
+```
+
+Configuration lives in `pyproject.toml` (Black & Ruff). The recommended line length is **100** and the target Python version is **3.11**.
+
+
 ## 📄 License
 MIT License © 2025 Sheldon H. Gordon

@@ -1,40 +1,31 @@
-# Makefile for Data Coherence Engine v0.1
+# Makefile — Data Coherence Engine
 
-PYTHON=python
-VENV=.venv
-ACTIVATE=. $(VENV)/bin/activate;
+SHELL := /bin/bash
+VENV  := .venv
+ACTIVATE := . $(VENV)/bin/activate;
 
-help:
-	@echo "Available commands:"
-	@echo "  make install     - Create venv and install dependencies"
-	@echo "  make run         - Run the FastAPI server locally"
-	@echo "  make test        - Run pytest suite"
-	@echo "  make lint        - Run lint and formatting checks (non-destructive)"
-	@echo "  make format      - Auto-format with Black and Ruff (destructive)"
-	@echo "  make streamlit   - Launch Streamlit verification app"
-	@echo "  make clean       - Remove build artifacts"
+.PHONY: install run test lint format clean streamlit
 
 install:
-	$(PYTHON) -m venv $(VENV)
+	python3.11 -m venv $(VENV)
+	$(ACTIVATE) pip install -U pip
 	$(ACTIVATE) pip install -r requirements.txt
 
 run:
-	$(ACTIVATE) uvicorn app:app --reload --port 8000
+	$(ACTIVATE) uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
 
 test:
 	$(ACTIVATE) pytest -v
 
 lint:
-	$(ACTIVATE) ruff check .
+	$(ACTIVATE) pylint $$(git ls-files '*.py')
 	$(ACTIVATE) black --check .
 
 format:
 	$(ACTIVATE) black .
-	$(ACTIVATE) ruff check . --fix
 
 streamlit:
 	$(ACTIVATE) API_BASE="http://localhost:8000" streamlit run streamlit_app.py
 
 clean:
-	rm -rf __pycache__ .pytest_cache *.pyc *.pyo *.pyd *.db *.csv
-	rm -rf $(VENV)
+	rm -rf $(VENV) __pycache__ .pytest_cache .mypy_cache .ruff_cache
