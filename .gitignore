@@ -1,26 +1,44 @@
+# Python cache and build artifacts
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+*.db
+*.DS_Store
 
+# Virtual environments
 .venv/
 env/
+ENV/
 venv/
 
-build/
-dist/
-*.egg-info/
-
-.mypy_cache/
-.pytest_cache/
-.coverage
-
+# OS or IDE files
 .vscode/
 .idea/
+*.swp
+*.swo
 
-.ipynb_checkpoints/
-.DS_Store
+# Testing and reports
+.pytest_cache/
+coverage.xml
+htmlcov/
 
+# Data artifacts
+artifacts/
+rolling_store.csv
+*.csv
+*.json
+
+# Git and local configs
+.git/
+.gitignore
+.dockerignore
 .env
 .env.*
-rolling_store.csv
-rolling_store.db
+*.example
+
+# Docs or exports
+*.pdf
+*.md~

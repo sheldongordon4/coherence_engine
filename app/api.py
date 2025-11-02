@@ -1,4 +1,3 @@
-# app/api.py
 import os
 import json
 import random
@@ -131,7 +130,7 @@ def _get_values(source: str) -> List[float]:
                 pass
         return _mock_series()
     if source == "darshan_api":
-        # placeholder until real API ingestion wires in
+        # API ingestion placeholder
         return _mock_series(center=74.0, jitter=0.12)
     raise HTTPException(status_code=400, detail=f"Unknown source '{source}'")
 

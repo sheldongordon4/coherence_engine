@@ -43,6 +43,9 @@ run:
 streamlit:
 	$(ACTIVATE) API_BASE="http://localhost:8000" streamlit run streamlit_app/app.py
 
+automation-drift:
+	$(ACTIVATE) python -m automation.drift_sentry --window 24h --fail-on-critical
+
 # -----------------------------------------------------------------------------
 # Testing & Quality
 # -----------------------------------------------------------------------------

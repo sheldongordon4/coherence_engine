@@ -1,31 +1,34 @@
-# 🧠 Coherence Engine
+# Coherence Engine
 
-A lightweight **Data Coherence Engine** that ingests signal data from Darshan’s API (or mock JSON), computes transparent coherence metrics, and exposes them via a **FastAPI** service — with an optional **Streamlit** dashboard for internal verification.
+A lightweight **Data Coherence Engine** that ingests signal data from Darshan’s API (or mock JSON), computes transparent coherence metrics, and exposes them via a **FastAPI** service — with an optional **Streamlit** dashboard for verification.
+
+Now enhanced with an **Automation Drift Sentry**, an automation that monitors drift metrics, generates incident reports, and provides a transparent, auditable trail — all without changing your API or compute layer.
 
 ---
 
-## 🚀 Overview
+## Overview
 
 The **Coherence Engine** processes signal summaries from the `/signals/summary` endpoint and computes key metrics that quantify data stability and drift over time.  
 It emphasizes **traceability**, **interpretability**, and **modular design** — every computed value can be traced back to its raw input.
 
 ### Core Features
 
-- **Data Ingestion:** Pulls data from Darshan’s `/signals/summary` endpoint (or a mock JSON file).
+- **Data Ingestion:** Fetches data from Darshan’s `/signals/summary` endpoint or mock JSON.
 - **Metrics Computation:**
   - `coherenceMean` – rolling average  
   - `volatilityIndex` – standard deviation / mean  
-  - `predictedDriftRisk` – simple rule-based classifier (`low`, `medium`, `high`)
+  - `predictedDriftRisk` – rule-based classifier (`low`, `medium`, `high`)
 - **API Endpoints:**
-  - `GET /coherence/metrics` → returns current summary  
-  - `GET /coherence/predict` → returns drift risk forecast  
-  - `GET /health`, `GET /status` → diagnostics  
-- **Persistence Layer:** Local CSV or SQLite for rolling data storage.  
-- **Streamlit Dashboard:** Visual verification of coherence metrics over time.
+  - `GET /coherence/metrics` → current coherence summary  
+  - `GET /coherence/predict` → drift risk forecast  
+  - `GET /health`, `GET /status` → diagnostics
+- **Persistence Layer:** CSV or SQLite for rolling data storage.
+- **Streamlit Dashboard:** Visual inspection of coherence metrics.
+- **Automation Drift Sentry:** Automated drift detection and incident generation.
 
 ---
 
-## 🧩 Folder Structure
+## Folder Structure
 
 ```
 coherence_engine/
@@ -45,27 +48,37 @@ coherence_engine/
 │   │
 │   ├── persistence/
 │   │   ├── __init__.py
-│   │   ├── csv_store.py
 │   │   ├── base.py
+│   │   ├── csv_store.py
 │   │   └── sqlite_store.py
 │   │
 │   └── ingest/
 │       └── darshan_client.py
 │
+├── automation/
+│   ├── __init__.py
+│   └── drift_sentry.py
+│
+├── artifacts/
+│   └── incidents/
+│       └── (auto-generated JSON drift reports)
+│
 ├── data/
 │   └── mock_signals.json
 │
 ├── streamlit_app/
-│   └── app.py
+│   ├── app.py
+│   └── pages/
+│       └── 01_Incidents.py
 │
 └── tests/
 ```
 
 ---
 
-## ⚙️ Quick Start
+## Quick Start
 
-### 1️⃣ Clone & Setup
+### Clone & Setup
 
 ```bash
 git clone https://github.com/<your-username>/coherence_engine.git
@@ -83,9 +96,9 @@ pip install -r requirements.txt
 
 ---
 
-### 2️⃣ Environment Configuration
+### Environment Configuration
 
-Create a `.env` file in the root (example below):
+Create a `.env` file in the root directory:
 
 ```bash
 DARSHAN_BASE_URL=https://api.darshan.ai/v1
@@ -94,11 +107,16 @@ MOCK_PATH=/app/data/mock_signals.json
 DARSHAN_TIMEOUT_S=5
 PERSIST_PATH=/data
 DEFAULT_WINDOWS=1h,24h
+
+# Automation configuration
+API_BASE=http://localhost:8000
+DRIFT_PSI_WARN=0.10
+DRIFT_PSI_CRIT=0.25
 ```
 
 ---
 
-### 3️⃣ Run the API
+### Run the FastAPI Service
 
 ```bash
 make run
@@ -110,7 +128,7 @@ or directly:
 uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Check endpoints:
+Test the endpoints:
 
 ```bash
 curl http://localhost:8000/health
@@ -119,7 +137,7 @@ curl http://localhost:8000/coherence/metrics?window=3600
 
 ---
 
-### 4️⃣ Run the Streamlit Dashboard (Optional)
+### Run the Streamlit Dashboard
 
 ```bash
 make streamlit
@@ -131,35 +149,56 @@ Or manually:
 API_BASE="http://localhost:8000" streamlit run streamlit_app/app.py
 ```
 
----
-
-## 🐳 Docker Usage
-
-### Build the API image
-
-```bash
-docker build -t coherence-api --target api .
-```
-
-Run the API container:
-
-```bash
-docker run --name coherence-api   --env-file .env   -e PERSIST_PATH=/data   -e DARSHAN_MODE=mock   -e MOCK_PATH=/app/data/mock_signals.json   -p 8000:8000   -v "$(pwd)/data:/data"   coherence-api
-```
-
-### Build the Streamlit image
-
-```bash
-docker build -t coherence-streamlit --target streamlit .
-docker run -p 8501:8501   -e API_BASE="http://host.docker.internal:8000"   coherence-streamlit
-```
+In the sidebar, you’ll now see **“Drift Incidents”**, showing all generated incident reports.
 
 ---
 
-## 🧮 Example Output
+## Automation Workflow — Drift Sentry
+
+The **Drift Sentry Automation** autonomously monitors drift metrics, compares PSI values to thresholds, and generates timestamped JSON incident reports.
+
+### Run the automation manually
+
+```bash
+make automation-drift
+```
+
+or
+
+```bash
+python -m automation.drift_sentry --window 24h
+```
+
+Each run produces a file like:
+
+```
+artifacts/incidents/incident_20251030T220045_24h.json
+```
+
+Example incident:
+```json
+{
+  "kind": "drift_incident",
+  "created_at": "2025-10-30T22:00:45Z",
+  "window": "24h",
+  "assessment": [
+    {"signal": "sensor_A", "metric": "psi", "value": 0.27, "level": "CRITICAL"}
+  ],
+  "automation": {"name": "drift_sentry", "version": "0.1.0"}
+}
+```
+
+### Key Benefits
+- **Zero core changes:** uses existing FastAPI endpoints as its tools  
+- **Auditable:** every decision saved in an incident file  
+- **Composable:** ready for CI/CD or cron integration  
+- **Streamlit integration:** auto-discovers new incidents  
+
+---
+
+## Example API Output
 
 Example `/coherence/metrics` response:
-
 ```json
 {
   "coherenceMean": 86.0,
@@ -177,46 +216,54 @@ Example `/coherence/metrics` response:
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Run all tests:
-
 ```bash
 make test
 ```
 
-Or with `pytest` directly:
-
+Or directly:
 ```bash
 pytest -v
 ```
 
 ---
 
-## 🧰 Makefile Commands
+## Makefile Commands
 
 | Command | Description |
-|----------|--------------|
-| `make install` | Set up the virtual environment and install dependencies |
-| `make run` | Run FastAPI locally via Uvicorn |
-| `make test` | Run all pytest tests |
-| `make lint` | Lint code with Pylint and Black |
-| `make format` | Auto-format code with Black |
+|----------|-------------|
+| `make install` | Create virtual environment & install dependencies |
+| `make run` | Launch FastAPI server |
+| `make test` | Run tests |
+| `make lint` | Run Pylint & Black checks |
+| `make format` | Auto-format code |
 | `make streamlit` | Run the Streamlit dashboard |
-| `make clean` | Remove the virtual environment and temp files |
+| `make automation-drift` | Run the Drift Sentry automation |
+| `make clean` | Remove virtual environment & artifacts |
 
 ---
 
-## 🧠 Design Notes
+## Architecture Summary
 
-- **Transparency:** Every metric is computed via human-readable formulas; no hidden models.  
-- **Traceability:** Each metric result includes the computation method, timestamp, and source.  
-- **Resilience:** Ingestion layer supports mock data fallback and retry logic.  
-- **Extensibility:** Metrics module and persistence layer are modular and easily replaceable.
+| Layer | Description |
+|--------|--------------|
+| **Ingestion** | Pulls data from Darshan API or local mock |
+| **Compute** | Calculates mean, volatility, PSI/KS |
+| **Persistence** | Stores results in CSV or SQLite |
+| **API** | Exposes `/metrics`, `/status`, `/health` |
+| **Streamlit** | Visual interface for coherence metrics & incidents |
+| **Automation Layer** | Drift Sentry automation monitors metrics and logs drift |
 
 ---
 
-## 🧾 License
+## License
 
-MIT License © 2025 [Your Name or Organization]  
-Feel free to fork, extend, or integrate into your own data coherence systems.
+MIT License © 2025  
+Coherence Engine Project — Developed by Sheldon H. Gordon
+
+---
+
+**Version:** 0.1.0  
+**Last Updated:** October 30, 2025  
