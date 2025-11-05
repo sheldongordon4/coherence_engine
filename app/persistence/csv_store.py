@@ -44,7 +44,7 @@ class CsvMetricsStore:
                 n=int(r["n"]),
                 mean=float(r["mean"]),
                 stdev=float(r["stdev"]),
-                drift_risk=r["drift_risk"],  # type: ignore
+                drift_risk=r["drift_risk"], 
                 source=r.get("source") or "darshan_api",
                 request_id=r.get("request_id") or None,
             ))

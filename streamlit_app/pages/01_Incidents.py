@@ -4,16 +4,15 @@ import streamlit as st
 
 st.set_page_config(page_title="Drift Incidents", layout="wide")
 
-# Resolve repo root -> artifacts/incidents
 INCIDENT_DIR = Path(__file__).resolve().parents[2] / "artifacts" / "incidents"
 INCIDENT_DIR.mkdir(parents=True, exist_ok=True)
 
-st.title("🚨 Drift Incidents")
+st.title("Drift Incidents")
 st.caption(f"Directory: {INCIDENT_DIR}")
 
 files = sorted(INCIDENT_DIR.glob("incident_*.json"), reverse=True)
 if not files:
-    st.info("No incidents found yet. Run the drift agent to generate one:\n\n`make agent-drift`")
+    st.info("No incidents found yet. Run the drift agent to generate one:\n\n`make automation-drift`")
     st.stop()
 
 # Summary table
@@ -55,7 +54,7 @@ assessment = data.get("assessment", [])
 if assessment:
     st.dataframe([{k: v for k, v in a.items() if k != "details"} for a in assessment], use_container_width=True)
 else:
-    st.success("No WARN/CRITICAL signals in this incident. ✅")
+    st.success("No WARN/CRITICAL signals in this incident.")
 
 st.divider()
 with st.expander("Raw JSON (full snapshot)"):

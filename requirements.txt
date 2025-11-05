@@ -1,4 +1,4 @@
-# --- Core ---
+# Core
 fastapi
 uvicorn
 pydantic
@@ -7,24 +7,24 @@ httpx[http2]
 requests
 tenacity
 
-# --- Data / Analytics ---
+# Data / Analytics
 numpy
 pandas
 scikit-learn
 
-# --- Visualization / UI ---
+# Visualization / UI
 streamlit
 matplotlib
 seaborn
 
-# --- Database / Persistence ---
+# Database / Persistence
 sqlalchemy
 
-# --- Testing ---
+# Testing
 pytest
 pytest-asyncio
 pytest-httpx
 
-# --- Code Quality ---
+# Code Quality
 black
 pylint

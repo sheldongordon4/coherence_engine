@@ -16,7 +16,7 @@ from app.persistence.sqlite_store import SqliteMetricsStore
 
 load_dotenv()
 
-# --- add helper ---
+# add helper
 def _as_metrics_response(obj) -> "MetricsResponse":
     # works whether compute_metrics returns a dict or a MetricsResponse
     from app.schemas import MetricsResponse as _MR
@@ -24,26 +24,21 @@ def _as_metrics_response(obj) -> "MetricsResponse":
         return obj
     if isinstance(obj, dict):
         return _MR(**obj)
-    # last resort: let pydantic coerce
-    return _MR.model_validate(obj)  # pydantic v2-safe
+    # let pydantic coerce if necessary
+    return _MR.model_validate(obj)
 
-# -------------------------
 # Constants / env
-# -------------------------
 ENGINE_VERSION = os.getenv("ENGINE_VERSION", "0.1.0")
 PERSISTENCE = os.getenv("PERSISTENCE", "none")  # csv | sqlite | none
 CSV_PATH = os.getenv("CSV_PATH", "rolling_store.csv")
 SQLITE_PATH = os.getenv("SQLITE_PATH", "rolling_store.db")
 START_TIME = datetime.now(timezone.utc)
 
-# Support DEFAULT_WINDOW (preferred) or first of DEFAULT_WINDOWS
 _DEFAULT_WINDOW = os.getenv("DEFAULT_WINDOW")
 if not _DEFAULT_WINDOW:
     _DEFAULT_WINDOW = (os.getenv("DEFAULT_WINDOWS", "1h,24h").split(",")[0]).strip() or "1h"
 
-# -------------------------
 # Persistence
-# -------------------------
 if PERSISTENCE == "csv":
     store = CsvMetricsStore(CSV_PATH)
 elif PERSISTENCE == "sqlite":
@@ -51,9 +46,7 @@ elif PERSISTENCE == "sqlite":
 else:
     store = None
 
-# -------------------------
-# Lifespan (lazy ingestion client init)
-# -------------------------
+# Lifespan (ingestion client init)
 _client: Optional[Any] = None
 _ingest_status = IngestStatus(
     source="mock" if os.getenv("MOCK_PATH") else "darshan_api",
@@ -68,7 +61,7 @@ _ingest_status = IngestStatus(
 async def lifespan(app: FastAPI):
     global _client
     try:
-        from app.ingest.darshan_client import DarshanClient  # type: ignore
+        from app.ingest.darshan_client import DarshanClient
         _client = DarshanClient(
             base_url=os.getenv("DARSHAN_BASE_URL", "http://localhost:9999"),
             api_key=os.getenv("DARSHAN_API_KEY"),
@@ -89,9 +82,7 @@ async def lifespan(app: FastAPI):
 # Single app instance
 app = FastAPI(title="Coherence Engine", version=ENGINE_VERSION, lifespan=lifespan)
 
-# -------------------------
 # Helpers
-# -------------------------
 def parse_window(window: str) -> int:
     w = window.strip().lower()
     if w.endswith("s"):
@@ -134,9 +125,8 @@ def _get_values(source: str) -> List[float]:
         return _mock_series(center=74.0, jitter=0.12)
     raise HTTPException(status_code=400, detail=f"Unknown source '{source}'")
 
-# -------------------------
+
 # Schemas for /status
-# -------------------------
 class StatusResponse(BaseModel):
     status: str
     version: str
@@ -147,9 +137,8 @@ class StatusResponse(BaseModel):
     persistence: str
     ingest: IngestStatus
 
-# -------------------------
+
 # Routes
-# -------------------------
 @app.get("/health")
 def health():
     return {"status": "ok", "version": ENGINE_VERSION}
@@ -214,7 +203,7 @@ async def get_coherence_metrics(
             source=metrics.inputs.get("source", "darshan_api"),
             request_id=metrics.meta.get("request_id"),
         )
-        print("M3 saving:", rec.model_dump())  # quick log
+        print("M3 saving:", rec.model_dump())
         store.save(rec)
 
     return metrics

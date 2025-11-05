@@ -9,9 +9,7 @@ import requests
 import streamlit as st
 from typing import Optional, Tuple
 
-# --------------------------
 # Configuration
-# --------------------------
 API_BASE = os.getenv("API_BASE", "http://localhost:8000")
 PERSISTENCE = os.getenv("PERSISTENCE", "csv")  # csv | sqlite | none
 
@@ -20,9 +18,7 @@ CSV_PATH = ROOT / "rolling_store.csv"
 SQLITE_PATH = ROOT / "rolling_store.db"
 SQLITE_TABLE = "rolling_metrics"
 
-# --------------------------
 # Helpers
-# --------------------------
 @st.cache_data(ttl=10)
 def fetch_json(endpoint: str, params: dict | None = None, api_base: str | None = None):
     try:
@@ -111,20 +107,18 @@ def risk_badge(risk: str):
     color = colors.get(str(risk).lower(), "#6b7280")
     return f"<span style='background:{color};color:white;padding:4px 10px;border-radius:999px;font-weight:600'>{risk}</span>"
 
-# --------------------------
 # UI
-# --------------------------
 st.set_page_config(page_title="Coherence Verification", page_icon="✅", layout="wide")
-st.title("✅ Coherence Engine — Streamlit Verification")
+st.title("Coherence Engine — Streamlit Verification")
 
 with st.sidebar:
     st.subheader("Controls")
     api_base = st.text_input("API Base", value=API_BASE)
     window = st.selectbox("Window", ["5m", "1h", "24h"], index=1)
     persistence = st.selectbox("Persistence", ["csv", "sqlite", "none"], index=0)
-    refresh = st.button("🔄 Refresh")
+    refresh = st.button("Refresh")
 
-# --- Health & Status ---
+# Health & Status
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("Health")
@@ -137,7 +131,7 @@ with col2:
 
 st.divider()
 
-# --- Metrics ---
+# Metrics
 st.subheader("Latest Metrics")
 metrics = (
     fetch_json("coherence/metrics", {"window": window}, api_base=api_base)
@@ -157,16 +151,14 @@ else:
         unsafe_allow_html=True
     )
     st.download_button(
-        "⬇️ Download latest JSON",
+        "Download latest JSON",
         data=json.dumps(metrics, indent=2),
         file_name=f"coherence_latest_{window}.json",
         mime="application/json",
         use_container_width=True,
     )
 
-# --- History ---
-# --- replace your existing History section with this block ---
-
+# History
 st.subheader("Historical View")
 
 df, info = load_history(persistence)
@@ -182,7 +174,7 @@ else:
     # show a peek regardless of schema
     csv_bytes = df.to_csv().encode("utf-8")
     st.download_button(
-        "⬇️ Download history (CSV)",
+        "Download history (CSV)",
         data=csv_bytes,
         file_name="coherence_history.csv",
         mime="text/csv",

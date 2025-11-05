@@ -7,7 +7,7 @@ import time
 @dataclass(frozen=True)
 class BasicStats:
     mean: float
-    stdev: float  # sample stdev
+    stdev: float 
     n: int
 
 def _mean(xs: Iterable[float]) -> Tuple[float, int]:
