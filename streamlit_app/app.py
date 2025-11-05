@@ -51,7 +51,7 @@ def load_history(persistence: str) -> Tuple[Optional[pd.DataFrame], dict]:
     info = {"path": None, "columns": [], "picked_time": None, "picked_mean": None, "picked_vol": None}
 
     if persistence == "csv" and CSV_PATH.exists():
-        df = pd.read_csv(CSV_PATH)
+        df = pd.read_csv(CSV_PATH, engine="python", on_bad_lines="skip")
         info["path"] = str(CSV_PATH)
     elif persistence == "sqlite" and SQLITE_PATH.exists():
         with sqlite3.connect(SQLITE_PATH) as conn:

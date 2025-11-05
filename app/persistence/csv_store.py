@@ -14,7 +14,7 @@ class CsvMetricsStore:
         if not self.path.exists():
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with self.path.open("w", newline="") as f:
-                csv.writer(f).writerow(_HEADERS)
+                csv.writer(f, lineterminator="\n").writerow(_HEADERS)
 
     def save(self, record: MetricsRecord) -> None:
         self.init()
@@ -29,7 +29,7 @@ class CsvMetricsStore:
             record.request_id or "",
         ]
         with self.path.open("a", newline="") as f:
-            csv.writer(f).writerow(row)
+            csv.writer(f, lineterminator="\n").writerow(row)
 
     def read_latest(self, limit: int = 100) -> List[MetricsRecord]:
         self.init()

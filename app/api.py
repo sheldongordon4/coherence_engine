@@ -202,7 +202,7 @@ async def get_coherence_metrics(
             source=metrics.inputs.get("source", "darshan_api"),
             request_id=metrics.meta.get("request_id"),
         )
-        print("M3 saving:", rec.model_dump())
+        print("Info saving:", rec.model_dump())
         store.save(rec)
 
     return metrics
