@@ -44,7 +44,7 @@ def classify_risk(mean: float, vol_idx: float) -> Literal["low","medium","high"]
     if vol_idx < 0.5:  return "medium"
     return "high"
 
-def compute_metrics(values: List[float], window_sec: int, source: str = "darshan_api") -> dict:
+def compute_metrics(values: List[float], window_sec: int, source: str = "mock_data") -> dict:
     t0 = time.perf_counter()
     stats = basic_stats(values)
     if abs(stats.mean) < 1e-12:

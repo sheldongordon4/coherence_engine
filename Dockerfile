@@ -1,7 +1,5 @@
-# ===============================
 # Coherence Engine - Dockerfile
 # Multi-stage build for API, Streamlit UI, and Agent
-# ===============================
 
 # Base image
 FROM python:3.11-slim AS base

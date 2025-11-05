@@ -18,18 +18,17 @@ load_dotenv()
 
 # add helper
 def _as_metrics_response(obj) -> "MetricsResponse":
-    # works whether compute_metrics returns a dict or a MetricsResponse
     from app.schemas import MetricsResponse as _MR
     if isinstance(obj, _MR):
         return obj
     if isinstance(obj, dict):
         return _MR(**obj)
-    # let pydantic coerce if necessary
+    # coerce if necessary
     return _MR.model_validate(obj)
 
 # Constants / env
 ENGINE_VERSION = os.getenv("ENGINE_VERSION", "0.1.0")
-PERSISTENCE = os.getenv("PERSISTENCE", "none")  # csv | sqlite | none
+PERSISTENCE = os.getenv("PERSISTENCE", "none")
 CSV_PATH = os.getenv("CSV_PATH", "rolling_store.csv")
 SQLITE_PATH = os.getenv("SQLITE_PATH", "rolling_store.db")
 START_TIME = datetime.now(timezone.utc)

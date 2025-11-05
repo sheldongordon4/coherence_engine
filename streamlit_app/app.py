@@ -11,7 +11,7 @@ from typing import Optional, Tuple
 
 # Configuration
 API_BASE = os.getenv("API_BASE", "http://localhost:8000")
-PERSISTENCE = os.getenv("PERSISTENCE", "csv")  # csv | sqlite | none
+PERSISTENCE = os.getenv("PERSISTENCE", "csv")
 
 ROOT = Path(__file__).resolve().parents[1]
 CSV_PATH = ROOT / "rolling_store.csv"
@@ -35,7 +35,7 @@ MEAN_CANDIDATES = ["coherenceMean", "coherence_mean", "mean"]
 VOL_CANDIDATES  = ["volatilityIndex", "volatility_index", "volatility", "stdev"]
 
 def _pick_col(cols: list[str], candidates: list[str]) -> Optional[str]:
-    lower = {c.lower(): c for c in cols}  # map lower→original
+    lower = {c.lower(): c for c in cols}
     for name in candidates:
         if name in cols:
             return name
@@ -109,7 +109,7 @@ def risk_badge(risk: str):
 
 # UI
 st.set_page_config(page_title="Coherence Verification", page_icon="✅", layout="wide")
-st.title("Coherence Engine — Streamlit Verification")
+st.title("Coherence Engine Verification")
 
 with st.sidebar:
     st.subheader("Controls")
@@ -171,7 +171,6 @@ with st.expander("Schema inspector (debug)", expanded=False):
 if df is None:
     st.info(f"No persisted data found for mode `{persistence}`.")
 else:
-    # show a peek regardless of schema
     csv_bytes = df.to_csv().encode("utf-8")
     st.download_button(
         "Download history (CSV)",

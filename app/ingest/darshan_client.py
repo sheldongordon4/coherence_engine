@@ -70,7 +70,6 @@ class DarshanClient:
                 try:
                     page = await self._get_page(client, "/signals/summary", req_params)
                 except httpx.RequestError as e:
-                    # track a retry attempt in meta
                     retries += 1
                     raise e
 
@@ -100,7 +99,6 @@ class DarshanClient:
         try:
             return DarshanPage.model_validate(resp.json())
         except ValidationError as ve:
-            # Re-raise with context for easier debugging
             raise ValueError(f"Invalid response schema: {ve}") from ve
 
     async def _fetch_mock(self) -> Tuple[List[DarshanSignalSummary], dict]:

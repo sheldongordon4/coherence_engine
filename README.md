@@ -2,7 +2,7 @@
 
 A lightweight **Data Coherence Engine** that ingests signal data from Darshan’s API (or mock JSON), computes transparent coherence metrics, and exposes them via a **FastAPI** service — with an optional **Streamlit** dashboard for verification.
 
-Now enhanced with an **Automation Drift Sentry**, an automation that monitors drift metrics, generates incident reports, and provides a transparent, auditable trail — all without changing your API or compute layer.
+Enhanced with an **Automation Drift Sentry**, an automation that monitors drift metrics, generates incident reports, and provides a transparent, auditable trail.
 
 ---
 

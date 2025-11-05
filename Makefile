@@ -16,9 +16,8 @@ export SQLITE_PATH ?= rolling_store.db
 
 .PHONY: install run test lint format clean streamlit env health status deps dev-freeze ingest
 
-# -----------------------------------------------------------------------------
+
 # Setup & Installation
-# -----------------------------------------------------------------------------
 
 install:
 	$(PY) -m venv $(VENV)
@@ -33,9 +32,8 @@ deps:
 dev-freeze:
 	$(ACTIVATE) pip freeze > requirements-freeze.txt
 
-# -----------------------------------------------------------------------------
+
 # Run & Verification
-# -----------------------------------------------------------------------------
 
 run:
 	$(ACTIVATE) uvicorn app.api:app --host $(APP_HOST) --port $(APP_PORT) --reload
@@ -46,9 +44,8 @@ streamlit:
 automation-drift:
 	$(ACTIVATE) python -m automation.drift_sentry --window 24h --fail-on-critical
 
-# -----------------------------------------------------------------------------
+
 # Testing & Quality
-# -----------------------------------------------------------------------------
 
 test:
 	$(ACTIVATE) pytest -v
@@ -63,9 +60,8 @@ lint:
 format:
 	$(ACTIVATE) black .
 
-# -----------------------------------------------------------------------------
+
 # Utilities
-# -----------------------------------------------------------------------------
 
 env:
 	@test -f $(ENV_FILE) || (cp $(ENV_EXAMPLE) $(ENV_FILE) && echo "Created $(ENV_FILE) from $(ENV_EXAMPLE)")
