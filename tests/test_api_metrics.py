@@ -3,9 +3,9 @@ from fastapi.testclient import TestClient
 
 # Force env for predictable defaults inside the app module import
 os.environ.setdefault("DEFAULT_WINDOW", "1h")
-os.environ.pop("MOCK_PATH", None)  # avoid file-based mocks in CI
+os.environ.pop("MOCK_PATH", None)
 
-from app.api import app  # noqa: E402
+from app.api import app
 
 client = TestClient(app)
 
