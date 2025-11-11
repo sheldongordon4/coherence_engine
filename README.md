@@ -1,28 +1,30 @@
-# Coherence Engine
+# Coherence Engine — Phase 2 (Semantic Metrics & Interpretation Layer)
 
-The Coherence Engine is the runtime layer that maintains stable, trustworthy behavior across human and machine agents. It ingests streaming signal summaries (linguistic, biometric, behavioral, operational), computes coherence stability metrics, detects drift, and emits auditable incident reports for governance and recovery.
+The **Coherence Engine** is the runtime layer that maintains **stable, trustworthy behavior** across human and machine agents.  
+It ingests streaming signal summaries (linguistic, biometric, behavioral, operational), computes **semantic coherence metrics**, detects **trust continuity risks**, and emits **ledger-ready incident reports** for governance and recovery.
 
 ---
 
 ## Overview
 
-The **Coherence Engine** processes signal summaries from the `/signals/summary` endpoint and computes key metrics that quantify data stability and drift over time.  
-It emphasizes **traceability**, **interpretability**, and **modular design** — every computed value can be traced back to its raw input.
+The **Coherence Engine** now measures not just statistical drift but **nervous-system stability**, **trust continuity**, and **signal coherence** over time.  
+Every number has meaning, traceability, and actionability.
 
 ### Core Features
 
-- **Data Ingestion:** Fetches data from Darshan’s `/signals/summary` endpoint or mock JSON.
-- **Metrics Computation:**
-  - `signalStability` – measure of system interal state over time  
-  - `signalLiquidity` – measures state shifts (emotional/behavioral oscillation)  
-  - `trustContinuityRisk` – likelihood of misalignment or coherence breakdown under load (`low`, `medium`, `high`)
+- **Signal Ingestion:** Retrieves summaries from Darshan’s `/signals/summary` endpoint or local mock JSON.
+- **Semantic Metrics:**
+  - `interactionStability` — how steady the system’s internal state remains  
+  - `signalVolatility` — how fast the state oscillates (behavioral liquidity)  
+  - `trustContinuityRiskLevel` — likelihood of coherence breakdown (`low | medium | high`)  
+  - `coherenceTrend` — trajectory across the window (`Improving | Steady | Deteriorating`)
+- **Interpretation Block:** Maps numeric bands to human-readable labels for decision-making.
 - **API Endpoints:**
-  - `GET /coherence/metrics` → current coherence summary  
-  - `GET /coherence/predict` → drift risk forecast  
-  - `GET /health`, `GET /status` → diagnostics
-- **Persistence Layer:** CSV or SQLite for rolling data storage.
-- **Streamlit Dashboard:** Visual inspection of coherence metrics.
-- **Automation Drift Sentry:** Automated drift detection and incident generation.
+  - `GET /coherence/metrics` → semantic coherence summary  
+  - `GET /health`, `GET /status` → diagnostics  
+- **Persistence Layer:** CSV or SQLite rolling data store.
+- **Streamlit Dashboard:** Live **Coherence Operations Console**.
+- **Automation:** *Drift Sentry* now emits `trust_continuity_alert` events (ledger-ready format).
 
 ---
 
@@ -59,7 +61,7 @@ coherence_engine/
 │
 ├── artifacts/
 │   └── incidents/
-│       └── (auto-generated JSON drift reports)
+│       └── (auto-generated JSON trust_continuity_alerts)
 │
 ├── data/
 │   └── mock_signals.json
@@ -76,192 +78,174 @@ coherence_engine/
 
 ## Quick Start
 
-### Clone & Setup
-
 ```bash
 git clone https://github.com/<your-username>/coherence_engine.git
 cd coherence_engine
 make install
-```
-
-Or manually:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+make env
+make api
 ```
 
 ---
 
-### Environment Configuration
+## Environment Configuration (Phase 2)
 
-Create a `.env` file in the root directory:
+Create `.env` in the project root and include:
 
-```bash
-DARSHAN_BASE_URL=https://api.darshan.ai/v1
-DARSHAN_MODE=mock
-MOCK_PATH=/app/data/mock_signals.json
-DARSHAN_TIMEOUT_S=5
-PERSIST_PATH=/data
-DEFAULT_WINDOWS=1h,24h
-
-# Automation configuration
-API_BASE=http://localhost:8000
-DRIFT_PSI_WARN=0.10
-DRIFT_PSI_CRIT=0.25
+```env
+COHERENCE_MODE=demo                # demo | production
+COHERENCE_WARN_THRESHOLD=0.10
+COHERENCE_CRITICAL_THRESHOLD=0.25
+TREND_SENSITIVITY=0.03
+STABILITY_HIGH_MIN=0.80
+STABILITY_MEDIUM_MIN=0.55
+UI_REFRESH_MS=3000
 ```
+
+Legacy PSI fields (`DRIFT_PSI_WARN`, `DRIFT_PSI_CRIT`) can remain temporarily for backward compatibility.
 
 ---
 
-### Run the FastAPI Service
+## Run the FastAPI Service
 
 ```bash
-make run
-```
-
-or directly:
-
-```bash
+make api
+# or
 uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Test the endpoints:
+Test:
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/coherence/metrics?window=3600
+curl "http://localhost:8000/coherence/metrics?window=86400"
 ```
 
----
+### Example Response
 
-### Run the Streamlit Dashboard
-
-```bash
-make streamlit
-```
-
-Or manually:
-
-```bash
-API_BASE="http://localhost:8000" streamlit run streamlit_app/app.py
-```
-
-In the sidebar, you’ll now see **“Drift Incidents”**, showing all generated incident reports.
-
----
-
-## Automation Workflow — Drift Sentry
-
-The **Drift Sentry Automation** autonomously monitors drift metrics, compares PSI values to thresholds, and generates timestamped JSON incident reports.
-
-### Run the automation manually
-
-```bash
-make automation-drift
-```
-
-or
-
-```bash
-python -m automation.drift_sentry --window 24h
-```
-
-Each run produces a file like:
-
-```
-artifacts/incidents/incident_20251030T220045_24h.json
-```
-
-Example incident:
 ```json
 {
-  "event": "trust_continuity_alert",
-  "created_at": "2025-10-30T22:00:45Z",
-  "window": "24h",
-  "assessment": [
-    {"signal": "sensor_A", "metric": "psi", "value": 0.27, "level": "CRITICAL"}
-  ],
-  "automation": {"name": "drift_sentry", "version": "0.1.0"}
+  "interactionStability": 0.8621,
+  "signalVolatility": 0.1422,
+  "trustContinuityRiskLevel": "low",
+  "coherenceTrend": "Steady",
+  "interpretation": {
+    "stability": "High",
+    "trustContinuity": "Stable",
+    "coherenceTrend": "Steady"
+  },
+  "meta": {
+    "method": "rolling mean/stdev; half-window trend",
+    "windowSec": 86400,
+    "n": 120,
+    "timestamp": "2025-11-06T20:12:41.391Z"
+  },
+  "coherenceMean": 0.8621,
+  "volatilityIndex": 0.1422,
+  "predictedDriftRisk": "low"
 }
 ```
 
-### Key Benefits
-- **Zero core changes:** uses existing FastAPI endpoints as its tools  
-- **Auditable:** every decision saved in an incident file  
-- **Composable:** ready for CI/CD or cron integration  
-- **Streamlit integration:** auto-discovers new incidents  
+---
+
+## Dashboard
+
+Launch the Streamlit verification UI:
+
+```bash
+make ui
+# or
+streamlit run streamlit_app/app.py
+```
+
+### Dashboard Labels (Phase 2)
+
+- **Signal Stability**  
+- **Signal Liquidity**  
+- **Trust Continuity Risk**  
+- **Trust Continuity Alerts**
+
+When `COHERENCE_MODE=demo`, the dashboard auto-refreshes every 3 s.
 
 ---
 
-## Example API Output
+## Automation — Trust Continuity Alerts
 
-Example `/coherence/metrics` response:
+`automation/drift_sentry.py` now emits ledger-ready events like:
+
 ```json
 {
-  "signalStability": 86.0,
-  "signalLiquidity": 0.14,
-  "trustContinuityRisk": "low",
-  "timestamp": "2025-10-28T17:43:00Z",
-  "windowSec": 86400,
-  "n": 120,
-  "meta": {
-    "method": "rolling mean/stdev",
-    "latency_ms": 1.2
+  "event": "trust_continuity_alert",
+  "timestamp": "2025-11-10T20:12:41Z",
+  "window": "24h",
+  "signalStability": 0.84,
+  "signalLiquidity": 0.21,
+  "trustContinuityRisk": "medium",
+  "trace": {
+    "source": "coherence_engine_v0.1",
+    "upstream": "darshan_signals"
   }
 }
 ```
 
 ---
 
+## Makefile Highlights
+
+| Command | Purpose |
+|----------|----------|
+| `make install` | Install dependencies |
+| `make env` | Prepare `.env` with Phase-2 fields |
+| `make api` | Run FastAPI service |
+| `make ui` | Run Streamlit dashboard |
+| `make metrics` | GET /coherence/metrics (default) |
+| `make metrics_new` | include_legacy = false |
+| `make metrics_legacy` | include_legacy = true |
+| `make test` | Run pytest |
+| `make clean` | Clean env & caches |
+
+---
+
 ## Testing
 
-Run all tests:
 ```bash
 make test
-```
-
-Or directly:
-```bash
+# or
 pytest -v
 ```
 
----
-
-## Makefile Commands
-
-| Command | Description |
-|----------|-------------|
-| `make install` | Create virtual environment & install dependencies |
-| `make run` | Launch FastAPI server |
-| `make test` | Run tests |
-| `make lint` | Run Pylint & Black checks |
-| `make format` | Auto-format code |
-| `make streamlit` | Run the Streamlit dashboard |
-| `make automation-drift` | Run the Drift Sentry automation |
-| `make clean` | Remove virtual environment & artifacts |
+Unit tests in `tests/test_metrics.py` cover trend and threshold logic.
 
 ---
 
-## Architecture Summary
+## Interpretation Bands (Defaults)
 
-| Layer | Description |
-|--------|--------------|
-| **Ingestion** | Pulls data from Darshan API or local mock |
-| **Compute** | Calculates mean, volatility, PSI/KS |
-| **Persistence** | Stores results in CSV or SQLite |
-| **API** | Exposes `/metrics`, `/status`, `/health` |
-| **Streamlit** | Visual interface for coherence metrics & incidents |
-| **Automation Layer** | Drift Sentry automation monitors metrics and logs drift |
+| Metric | Rule | Label |
+|--------|------|-------|
+| `interactionStability ≥ 0.80` | High |
+| `0.55 ≤ interactionStability < 0.80` | Medium |
+| `< 0.55` | Low |
+| `signalVolatility < 0.10` | Risk = low |
+| `0.10–0.25` | Risk = medium |
+| `≥ 0.25` | Risk = high |
+| Trend Δ ≥ +3 % | Improving |
+| Trend Δ ≤ −3 % | Deteriorating |
+| Otherwise | Steady |
+
+---
+
+## Phase 2 Roadmap
+
+1. Externalize thresholds via `.env` (complete).  
+2. Expose trend interpretation layer (`rising`, `stable`, `declining`).  
+3. Emit incidents based on trend + risk logic.  
+4. Integrate coherence metrics with multi-agent governance dashboard.
 
 ---
 
 ## License
 
 MIT License © 2025  
-Coherence Engine Project — Developed by Sheldon H. Gordon
+Coherence Engine Project — Developed by Sheldon H. Gordon  
 
----
-
-**Version:** 0.1.0  
-**Last Updated:** November 4, 2025  
+**Version:** 0.2.0  
+**Last Updated:** November 10, 2025  
