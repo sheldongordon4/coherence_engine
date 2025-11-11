@@ -1,8 +1,6 @@
 # Coherence Engine
 
-A lightweight **Data Coherence Engine** that ingests signal data from Darshan’s API (or mock JSON), computes transparent coherence metrics, and exposes them via a **FastAPI** service — with an optional **Streamlit** dashboard for verification.
-
-Enhanced with an **Automation Drift Sentry**, an automation that monitors drift metrics, generates incident reports, and provides a transparent, auditable trail.
+The Coherence Engine is the runtime layer that maintains stable, trustworthy behavior across human and machine agents. It ingests streaming signal summaries (linguistic, biometric, behavioral, operational), computes coherence stability metrics, detects drift, and emits auditable incident reports for governance and recovery.
 
 ---
 
@@ -15,9 +13,9 @@ It emphasizes **traceability**, **interpretability**, and **modular design** —
 
 - **Data Ingestion:** Fetches data from Darshan’s `/signals/summary` endpoint or mock JSON.
 - **Metrics Computation:**
-  - `coherenceMean` – rolling average  
-  - `volatilityIndex` – standard deviation / mean  
-  - `predictedDriftRisk` – rule-based classifier (`low`, `medium`, `high`)
+  - `signalStability` – measure of system interal state over time  
+  - `signalLiquidity` – measures state shifts (emotional/behavioral oscillation)  
+  - `trustContinuityRisk` – likelihood of misalignment or coherence breakdown under load (`low`, `medium`, `high`)
 - **API Endpoints:**
   - `GET /coherence/metrics` → current coherence summary  
   - `GET /coherence/predict` → drift risk forecast  
@@ -178,7 +176,7 @@ artifacts/incidents/incident_20251030T220045_24h.json
 Example incident:
 ```json
 {
-  "kind": "drift_incident",
+  "event": "trust_continuity_alert",
   "created_at": "2025-10-30T22:00:45Z",
   "window": "24h",
   "assessment": [
@@ -201,9 +199,9 @@ Example incident:
 Example `/coherence/metrics` response:
 ```json
 {
-  "coherenceMean": 86.0,
-  "volatilityIndex": 0.14,
-  "predictedDriftRisk": "low",
+  "signalStability": 86.0,
+  "signalLiquidity": 0.14,
+  "trustContinuityRisk": "low",
   "timestamp": "2025-10-28T17:43:00Z",
   "windowSec": 86400,
   "n": 120,
