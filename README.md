@@ -22,6 +22,8 @@ It ingests streaming signal summaries (linguistic, biometric, behavioral, operat
 - **Persistence Layer:** CSV or SQLite rolling data store.
 - **Streamlit Dashboard:** Live **Coherence Operations Console**.
 - **Automation:** *Drift Sentry* emits `trust_continuity_alert` events (ledger-ready format).
+- **Docker Support:** Lightweight container image for deployment or demos.
+
 
 ## Folder Structure
 
@@ -31,7 +33,8 @@ coherence_engine/
 ├── .env
 ├── Makefile
 ├── requirements.txt
-├── rolling_store.csv
+├── Dockerfile
+├── .dockerignore
 │
 ├── app/
 │   ├── __init__.py
@@ -69,6 +72,7 @@ coherence_engine/
 └── tests/
 ```
 
+
 ## Quick Start
 
 ```bash
@@ -78,6 +82,7 @@ make install
 make env
 make api
 ```
+
 
 ## Environment Configuration (Phase 2)
 
@@ -94,6 +99,7 @@ UI_REFRESH_MS=3000
 ```
 
 Legacy PSI fields (`DRIFT_PSI_WARN`, `DRIFT_PSI_CRIT`) can remain temporarily for backward compatibility.
+
 
 ## Run the FastAPI Service
 
@@ -134,6 +140,7 @@ curl "http://localhost:8000/coherence/metrics?window=86400"
 }
 ```
 
+
 ## Dashboard
 
 Launch the Streamlit verification UI:
@@ -152,6 +159,7 @@ streamlit run streamlit_app/app.py
 - **Trust Continuity Alerts**
 
 When `COHERENCE_MODE=demo`, the dashboard auto-refreshes every 3 s.
+
 
 ## Automation — Trust Continuity Alerts
 
@@ -172,6 +180,48 @@ When `COHERENCE_MODE=demo`, the dashboard auto-refreshes every 3 s.
 }
 ```
 
+You can trigger alerts manually:
+
+```bash
+make automation-drift        # normal cadence
+make automation-demo         # fast 1h demo mode
+```
+
+
+## Docker Deployment
+
+### Build Image
+
+```bash
+docker build -t coherence-engine:latest .
+```
+
+### Run API Container
+
+```bash
+docker run --rm -p 8000:8000   --env-file .env   -v "$(pwd)/artifacts:/app/artifacts"   coherence-engine:latest
+```
+
+### Run Streamlit Dashboard
+
+```bash
+docker run --rm -p 8501:8501   --env-file .env   -v "$(pwd)/artifacts:/app/artifacts"   coherence-engine:latest   bash -lc "streamlit run streamlit_app/app.py --server.port=8501 --server.address=0.0.0.0"
+```
+
+### Docker Ignore
+
+Your `.dockerignore` excludes local caches, test data, `.venv`, and `artifacts/` for smaller, cleaner builds.  
+You can preserve folder structure using a `.gitkeep` file inside `artifacts/incidents`.
+
+
+## Backward Compatibility
+
+- **Legacy fields remain** (default) for any downstream code.  
+- Clients can set `include_legacy=false` to migrate to new naming.  
+- In **v0.2**, legacy names are preserved.  
+- In **v0.3**, they will be fully removed after deprecation warnings.
+
+
 ## Makefile Highlights
 
 | Command | Purpose |
@@ -183,8 +233,13 @@ When `COHERENCE_MODE=demo`, the dashboard auto-refreshes every 3 s.
 | `make metrics` | GET /coherence/metrics (default) |
 | `make metrics_new` | include_legacy = false |
 | `make metrics_legacy` | include_legacy = true |
+| `make automation-drift` | Emit trust continuity alert |
+| `make automation-demo` | Emit sample demo alert |
+| `make docker-build` | Build Docker image |
+| `make docker-run` | Run container |
 | `make test` | Run pytest |
 | `make clean` | Clean env & caches |
+
 
 ## Testing
 
@@ -194,7 +249,8 @@ make test
 pytest -v
 ```
 
-Unit tests in `tests/test_metrics.py` cover trend and threshold logic.
+Unit tests cover metric semantics, endpoint logic, backward compatibility, and automation emission.
+
 
 ## Interpretation Bands (Defaults)
 
@@ -210,17 +266,20 @@ Unit tests in `tests/test_metrics.py` cover trend and threshold logic.
 | Trend Δ ≤ −3 % | Deteriorating |
 | Otherwise | Steady |
 
+
 ## Phase 2 Roadmap
 
 1. Externalize thresholds via `.env` (complete).  
 2. Expose trend interpretation layer (`rising`, `stable`, `declining`).  
 3. Emit incidents based on trend + risk logic.  
-4. Integrate coherence metrics with multi-agent governance dashboard.
+4. Integrate coherence metrics with multi-agent governance dashboard.  
+5. Add combined API + UI Docker service for single-container deployment.  
+
 
 ## License
 
 MIT License © 2025  
 Coherence Engine Project — Developed by Sheldon H. Gordon  
 
-**Version:** 0.2.0  
-**Last Updated:** November 10, 2025  
+**Version:** 0.2.1  
+**Last Updated:** November 11, 2025  
