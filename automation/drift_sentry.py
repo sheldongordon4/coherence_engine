@@ -1,4 +1,14 @@
-# automation/drift_sentry.py
+from __future__ import annotations
+import argparse
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, Any
+import sys
+
+import urllib.request
+
 """
 Phase-2 Trust Continuity Alert emitter.
 Polls /coherence/metrics (semantic fields), evaluates risk, and writes
@@ -13,17 +23,6 @@ Env (optional):
   COHERENCE_CRITICAL_THRESHOLD=0.25
   COHERENCE_MODE=demo|production
 """
-
-from __future__ import annotations
-import argparse
-import json
-import os
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, Any
-import sys
-
-import urllib.request
 
 # ---------- Config ----------
 INCIDENTS_DIR = Path("artifacts/incidents")
@@ -43,7 +42,6 @@ def http_get_json(url: str) -> Dict[str, Any]:
 
 
 def map_level_from_vol(vol: float) -> str:
-    # keep aligned with README bands
     if vol < WARN_TH:
         return "low"
     if vol < CRIT_TH:
@@ -110,7 +108,7 @@ def main() -> int:
         "window": args.window,
         "signalStability": round(stability, 4),
         "signalLiquidity": round(volatility, 4),
-        "trustContinuityRisk": risk_level,  # Phase-2 friendly name for Streamlit page
+        "trustContinuityRisk": risk_level, 
         "trace": {
             "source": "coherence_engine_v0.2",
             "upstream": "darshan_signals",

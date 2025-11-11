@@ -1,10 +1,9 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Literal, Any
 
-
 class CoherenceMetricsResponse(BaseModel):
     """
-    Phase 2 Coherence metrics response model — EXACTLY matches the Updated API.
+    Phase 2 Coherence metrics response model.
     """
 
     # --- Phase 2 fields (canonical) ---

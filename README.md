@@ -1,14 +1,11 @@
-# Coherence Engine — Phase 2 (Semantic Metrics & Interpretation Layer)
+# Coherence Engine — Phase 2 Update (Semantic Metrics & Interpretation Layer)
 
 The **Coherence Engine** is the runtime layer that maintains **stable, trustworthy behavior** across human and machine agents.  
-It ingests streaming signal summaries (linguistic, biometric, behavioral, operational), computes **semantic coherence metrics**, detects **trust continuity risks**, and emits **ledger-ready incident reports** for governance and recovery.
-
----
 
 ## Overview
 
-The **Coherence Engine** now measures not just statistical drift but **nervous-system stability**, **trust continuity**, and **signal coherence** over time.  
-Every number has meaning, traceability, and actionability.
+The **Coherence Engine** measures not just statistical drift but **nervous-system stability**, **trust continuity**, and **signal coherence** over time.  
+It ingests streaming signal summaries (linguistic, biometric, behavioral, operational), computes **semantic coherence metrics**, detects **trust continuity risks**, and emits **ledger-ready incident reports** for governance and recovery where every number has meaning, traceability, and actionability.
 
 ### Core Features
 
@@ -24,9 +21,7 @@ Every number has meaning, traceability, and actionability.
   - `GET /health`, `GET /status` → diagnostics  
 - **Persistence Layer:** CSV or SQLite rolling data store.
 - **Streamlit Dashboard:** Live **Coherence Operations Console**.
-- **Automation:** *Drift Sentry* now emits `trust_continuity_alert` events (ledger-ready format).
-
----
+- **Automation:** *Drift Sentry* emits `trust_continuity_alert` events (ledger-ready format).
 
 ## Folder Structure
 
@@ -74,8 +69,6 @@ coherence_engine/
 └── tests/
 ```
 
----
-
 ## Quick Start
 
 ```bash
@@ -85,8 +78,6 @@ make install
 make env
 make api
 ```
-
----
 
 ## Environment Configuration (Phase 2)
 
@@ -103,8 +94,6 @@ UI_REFRESH_MS=3000
 ```
 
 Legacy PSI fields (`DRIFT_PSI_WARN`, `DRIFT_PSI_CRIT`) can remain temporarily for backward compatibility.
-
----
 
 ## Run the FastAPI Service
 
@@ -145,8 +134,6 @@ curl "http://localhost:8000/coherence/metrics?window=86400"
 }
 ```
 
----
-
 ## Dashboard
 
 Launch the Streamlit verification UI:
@@ -166,11 +153,9 @@ streamlit run streamlit_app/app.py
 
 When `COHERENCE_MODE=demo`, the dashboard auto-refreshes every 3 s.
 
----
-
 ## Automation — Trust Continuity Alerts
 
-`automation/drift_sentry.py` now emits ledger-ready events like:
+`automation/drift_sentry.py` emits ledger-ready events like:
 
 ```json
 {
@@ -187,8 +172,6 @@ When `COHERENCE_MODE=demo`, the dashboard auto-refreshes every 3 s.
 }
 ```
 
----
-
 ## Makefile Highlights
 
 | Command | Purpose |
@@ -203,8 +186,6 @@ When `COHERENCE_MODE=demo`, the dashboard auto-refreshes every 3 s.
 | `make test` | Run pytest |
 | `make clean` | Clean env & caches |
 
----
-
 ## Testing
 
 ```bash
@@ -214,8 +195,6 @@ pytest -v
 ```
 
 Unit tests in `tests/test_metrics.py` cover trend and threshold logic.
-
----
 
 ## Interpretation Bands (Defaults)
 
@@ -231,16 +210,12 @@ Unit tests in `tests/test_metrics.py` cover trend and threshold logic.
 | Trend Δ ≤ −3 % | Deteriorating |
 | Otherwise | Steady |
 
----
-
 ## Phase 2 Roadmap
 
 1. Externalize thresholds via `.env` (complete).  
 2. Expose trend interpretation layer (`rising`, `stable`, `declining`).  
 3. Emit incidents based on trend + risk logic.  
 4. Integrate coherence metrics with multi-agent governance dashboard.
-
----
 
 ## License
 

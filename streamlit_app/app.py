@@ -1,180 +1,120 @@
-# streamlit_app/app.py
-import os
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
 
-import requests
+import json
+import os
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
 import pandas as pd
 import streamlit as st
+import urllib.request
+import urllib.error
 
+# ---- Config ----
+API_BASE = os.getenv("API_BASE", "http://localhost:8000")
+MODE = os.getenv("COHERENCE_MODE", "demo")
+REFRESH_MS = int(os.getenv("UI_REFRESH_MS", "3000"))
 
-# ---------------------- Config ----------------------
-API_BASE = os.getenv("API_BASE", "http://localhost:8000").rstrip("/")
-MODE = os.getenv("COHERENCE_MODE", "demo").strip().lower()
-DEFAULT_WINDOW = int(os.getenv("DEFAULT_WINDOW_SEC", "86400"))  # 24h default
-REFRESH_SEC = 3 if MODE == "demo" else 15
+st.set_page_config(page_title="Coherence Operations Console", layout="wide")
 
-PAGE_TITLE = "Coherence Operations Console"
-st.set_page_config(page_title=PAGE_TITLE, layout="wide")
-st.title("Coherence Operations Console")
-st.caption(
-    "Signal integrity & trust observability — Phase 2. "
-    "Metrics: **Signal Stability**, **Signal Liquidity**, **Trust Continuity Risk**."
-)
-
-
-# ---------------------- Helpers ----------------------
-def _get(url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
-    try:
-        r = requests.get(url, params=params, timeout=10)
-        if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    return None
-
-
-def fetch_metrics(window_sec: int, include_legacy: bool = True) -> Optional[Dict[str, Any]]:
-    return _get(
-        f"{API_BASE}/coherence/metrics",
-        params={"window": window_sec, "include_legacy": str(include_legacy).lower()},
-    )
-
-
-def fetch_history(limit: int = 200) -> pd.DataFrame:
-    """
-    Best-effort history fetch.
-    Expects /coherence/history -> List[MetricsRecord] with legacy fields: mean, stdev, drift_risk, ts_utc, window_sec.
-    """
-    try:
-        r = requests.get(f"{API_BASE}/coherence/history", params={"limit": limit}, timeout=10)
-        if r.status_code != 200:
-            return pd.DataFrame()
-        rows = r.json()
-        if not isinstance(rows, list):
-            return pd.DataFrame()
-        df = pd.DataFrame(rows)
-        if df.empty:
-            return df
-
-        # Normalize columns to Phase-2 names for display
-        if "mean" in df.columns:
-            df["signalStability"] = pd.to_numeric(df["mean"], errors="coerce")
-        if "stdev" in df.columns:
-            df["signalLiquidity"] = pd.to_numeric(df["stdev"], errors="coerce")
-        if "drift_risk" in df.columns:
-            df["trustContinuityRisk"] = df["drift_risk"].astype(str)
-
-        # Parse time
-        if "ts_utc" in df.columns:
-            df["ts"] = pd.to_datetime(df["ts_utc"], errors="coerce")
-        else:
-            df["ts"] = pd.NaT
-
-        df = df.sort_values("ts").reset_index(drop=True)
-        return df
-    except Exception:
-        return pd.DataFrame()
-
-
-def pct(x: Optional[float]) -> str:
-    if x is None:
-        return "—"
-    return f"{x*100:.1f}%" if x <= 1.0 else f"{x:.1f}"
-
-
-# ---------------------- Sidebar ----------------------
-with st.sidebar:
-    st.subheader("Controls")
-    preset = st.selectbox("Window", ["1h (3600s)", "6h (21600s)", "24h (86400s)"], index={3600:0,21600:1,86400:2}.get(DEFAULT_WINDOW,2))
-    window_map = {"1h (3600s)": 3600, "6h (21600s)": 21600, "24h (86400s)": 86400}
-    window_sec = window_map[preset]
-
-    include_legacy = st.checkbox("Include legacy mirrors", value=True)
-    st.write(f"**Mode:** `{MODE}`")
-    st.write(f"**Auto-refresh:** every `{REFRESH_SEC}s`")
-    st.write(f"**API:** `{API_BASE}`")
-
-# Optional auto-refresh (works if streamlit-autorefresh is installed; otherwise no-op)
 try:
-    from streamlit_autorefresh import st_autorefresh as _auto
-    _auto(interval=REFRESH_SEC * 1000, limit=None, key="auto_refresh_main")
+    if MODE == "demo":
+        from streamlit_autorefresh import st_autorefresh  # type: ignore
+
+        st_autorefresh(interval=REFRESH_MS, key="metrics_auto")
 except Exception:
     pass
 
 
-# ---------------------- Data fetch ----------------------
-metrics = fetch_metrics(window_sec=window_sec, include_legacy=include_legacy)
-history_df = fetch_history(limit=300)
+# ---- Helpers ----
+@st.cache_data(show_spinner=False)
+def fetch_json(url: str, timeout: int = 8) -> Dict[str, Any]:
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
 
 
-# ---------------------- Guard ----------------------
-if not metrics:
-    st.error("Could not fetch metrics from the API. Check API_BASE and server status.")
+def arrow_sanitize(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for col in df.columns:
+        if df[col].dtype == "object":
+            if df[col].map(lambda x: isinstance(x, (bytes, bytearray))).any():
+                df[col] = df[col].apply(
+                    lambda x: x.decode("utf-8", "ignore") if isinstance(x, (bytes, bytearray)) else x
+                )
+            # if mixed object types remain, cast to string
+            if df[col].map(type).nunique() > 1:
+                df[col] = df[col].astype("string")
+        if col.lower() in {"value", "interactionstability", "signalvolatility"}:
+            df[col] = pd.to_numeric(df[col], errors="ignore")
+    return df
+
+
+def metrics_endpoint(base: str, window_sec: int, include_legacy: bool) -> str:
+    return f"{base}/coherence/metrics?window={window_sec}&include_legacy={'true' if include_legacy else 'false'}"
+
+
+# ---- Sidebar Controls ----
+st.sidebar.title("Controls")
+api_base = st.sidebar.text_input("API Base", value=API_BASE, help="Where the FastAPI service is running.")
+window_sec = st.sidebar.number_input("Window (sec)", min_value=60, step=60, value=86400)
+include_legacy = st.sidebar.toggle("Show legacy fields", value=False)
+st.sidebar.caption(f"Mode: **{MODE}** · Auto-refresh: **{REFRESH_MS} ms** (demo)")
+
+# ---- Fetch and Render Metrics ----
+st.title("Coherence Operations Console")
+st.caption("Phase-2 semantics: **Signal Stability**, **Signal Liquidity**, **Trust Continuity Risk**, **Trend**")
+
+url = metrics_endpoint(api_base, int(window_sec), include_legacy)
+error_box = st.empty()
+
+try:
+    payload = fetch_json(url)
+    error_box.empty()
+except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as e:
+    error_box.error(f"Could not reach API: {e}")
     st.stop()
 
+# Pull Phase-2 fields with graceful fallbacks
+stability = payload.get("interactionStability") or payload.get("coherenceMean")
+volatility = payload.get("signalVolatility") or payload.get("volatilityIndex")
+risk = payload.get("trustContinuityRiskLevel") or payload.get("predictedDriftRisk")
+trend = payload.get("coherenceTrend", "—")
+interp = payload.get("interpretation", {})
+meta = payload.get("meta", {})
 
-# ---------------------- KPIs ----------------------
-col1, col2, col3, col4 = st.columns(4)
+# KPIs
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.metric("Signal Stability", f"{stability:.4f}" if isinstance(stability, (int, float)) else str(stability))
+with c2:
+    st.metric("Signal Liquidity", f"{volatility:.4f}" if isinstance(volatility, (int, float)) else str(volatility))
+with c3:
+    st.metric("Trust Continuity Risk", str(risk).capitalize() if risk else "—")
+with c4:
+    st.metric("Trend", trend)
 
-stability = metrics.get("interactionStability")
-liquidity = metrics.get("signalVolatility")
-risk = (metrics.get("trustContinuityRiskLevel") or "").lower()
-trend = metrics.get("coherenceTrend")
-
-risk_emoji = {"low": "🟢", "medium": "🟠", "high": "🔴"}.get(risk, "⚪")
-
-col1.metric("Signal Stability", pct(stability))
-col2.metric("Signal Liquidity", f"{liquidity:.4f}" if isinstance(liquidity, (int, float)) else "—")
-col3.metric("Trust Continuity Risk", f"{risk_emoji} {risk.title() if risk else '—'}")
-col4.metric("Trend", trend or "—")
-
-# Interpretation chips
-st.write("**Interpretation**")
-interp = metrics.get("interpretation") or {}
-c1, c2, c3 = st.columns(3)
-c1.success(f"Stability: {interp.get('stability', '—')}")
-c2.info(f"Trust Continuity: {interp.get('trustContinuity', '—')}")
-c3.info(f"Trend: {interp.get('coherenceTrend', '—')}")
-
-
-# ---------------------- Charts ----------------------
 st.divider()
-st.subheader("Signals Over Time")
 
-if not history_df.empty and history_df["ts"].notna().any():
-    plot_df = history_df[["ts", "signalStability", "signalLiquidity"]].dropna()
-    plot_df = plot_df.set_index("ts")
-    st.line_chart(plot_df, height=260)
-else:
-    st.info("No history available yet. Enable persistence or run the drift sentry to accumulate records.")
+# Interpretation table
+interp_rows = [
+    {"Metric": "Stability Band", "Label": interp.get("stability", "—")},
+    {"Metric": "Trust Continuity", "Label": interp.get("trustContinuity", "—")},
+    {"Metric": "Trend", "Label": interp.get("coherenceTrend", trend)},
+]
+df_interp = arrow_sanitize(pd.DataFrame(interp_rows))
+st.subheader("Interpretation")
+st.dataframe(df_interp, use_container_width=True)
 
-
-# ---------------------- Raw Panels ----------------------
-st.divider()
-left, right = st.columns(2)
-
+# Meta + Raw JSON
+left, right = st.columns([1, 1])
 with left:
-    st.subheader("Latest Response (JSON)")
-    st.json(metrics, expanded=False)
-
-with right:
     st.subheader("Meta")
-    meta = metrics.get("meta") or {}
-    generated = meta.get("timestamp")
-    window_info = meta.get("windowSec", window_sec)
-    n = meta.get("n")
-    data = {
-        "Timestamp (UTC)": generated,
-        "Window (sec)": window_info,
-        "Samples (n)": n,
-        "Method": meta.get("method"),
-    }
-    st.table(pd.DataFrame(list(data.items()), columns=["Field", "Value"]))
+    meta_rows = [{"Key": k, "Value": v} for k, v in meta.items()]
+    df_meta = arrow_sanitize(pd.DataFrame(meta_rows))
+    st.dataframe(df_meta, use_container_width=True)
+with right:
+    with st.expander("Raw JSON"):
+        st.json(payload, expanded=False)
 
-
-# ---------------------- Footer ----------------------
-st.caption(
-    "Phase 2 naming: **interactionStability**, **signalVolatility**, **trustContinuityRiskLevel**, **coherenceTrend**. "
-    "Use `COHERENCE_MODE=demo|production` to adjust refresh cadence."
-)
+st.caption(f"Source: `{url}` · Timestamp: {datetime.now(timezone.utc).isoformat()}`")

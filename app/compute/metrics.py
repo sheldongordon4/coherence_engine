@@ -42,7 +42,6 @@ def _trend_label(values: List[float]) -> str:
 def _risk_from_liquidity(liq: float) -> str:
     """
     Coarse risk band derived from normalized volatility (aka signal volatility/liquidity).
-    Thresholds are placeholders; to be externalized to .env next patch.
     Returns one of: "low", "medium", "high".
     """
     if liq < 0.10:

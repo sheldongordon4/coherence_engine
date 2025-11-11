@@ -9,15 +9,7 @@ class CsvMetricsStore:
     """
     CSV persistence for Coherence Engine metrics.
 
-    PHASE 2 header (canonical):
-      ts_utc, window_sec, n,
-      interactionStability, signalVolatility, trustContinuityRiskLevel, coherenceTrend,
-      source, request_id
-
-    Legacy header (auto-upgraded on init):
-      ts_utc, window_sec, n, mean, stdev, drift_risk, source, request_id
-
-    NOTE: API & UI now speak Phase 2 names. Internally we still expose MetricsRecord
+    NOTE: API & UI speak Phase 2 names. Internally we still expose MetricsRecord
     to avoid touching callers; we map new<->old fields at the boundary.
     """
 
@@ -91,7 +83,7 @@ class CsvMetricsStore:
                 w.writerows(upgraded)
             return
 
-        # Unknown header: rewrite to Phase 2 and append best-effort rows
+        # Unknown header: rewrite and append best-effort rows
         with open(self.path, "w", encoding="utf-8", newline="") as f:
             w = csv.writer(f)
             w.writerow(self.HEADER_PHASE2)
