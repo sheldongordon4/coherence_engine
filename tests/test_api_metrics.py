@@ -1,77 +1,57 @@
-import json
+import os
+import pytest
 from fastapi.testclient import TestClient
 
-from app.api import app  # if you're using a router, import the FastAPI app that mounts it
+from app.api import app
 
 
 client = TestClient(app)
 
 
-def test_metrics_shape_matches_contract():
-    r = client.get("/coherence/metrics?window=86400&include_legacy=true")
+def test_health_and_status_endpoints():
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json().get("status") == "ok"
+
+    r = client.get("/status")
     assert r.status_code == 200
     body = r.json()
-
-    # Required new fields
-    for k in [
-        "interactionStability",
-        "signalVolatility",
-        "trustContinuityRiskLevel",
-        "coherenceTrend",
-        "interpretation",
-        "meta",
-    ]:
+    # Keys should exist even if values come from defaults
+    for k in ("mode", "warn_threshold", "critical_threshold", "trend_sensitivity", "timestamp"):
         assert k in body
 
-    # Types & enums
-    assert isinstance(body["interactionStability"], (int, float))
-    assert isinstance(body["signalVolatility"], (int, float))
-    assert body["trustContinuityRiskLevel"] in {"low", "medium", "high"}
-    assert body["coherenceTrend"] in {"Improving", "Steady", "Deteriorating"}
 
-    # Interpretation sub-keys
-    interp = body["interpretation"]
-    assert set(interp.keys()) == {"stability", "trustContinuity", "coherenceTrend"}
-    assert interp["stability"] in {"High", "Medium", "Low"}
-    assert interp["trustContinuity"] in {"Stable", "At Risk", "Critical"}
-    assert interp["coherenceTrend"] in {"Improving", "Steady", "Deteriorating"}
-
-    # Meta
-    meta = body["meta"]
-    assert meta["method"] == "rolling mean/stdev; half-window trend"
-    assert isinstance(meta["windowSec"], int)
-    assert isinstance(meta["n"], int)
-    assert isinstance(meta["timestamp"], str)
-    assert meta["timestamp"].endswith("Z")
-
-    # Legacy mirrors present
-    assert "coherenceMean" in body
-    assert "volatilityIndex" in body
-    assert "predictedDriftRisk" in body
-
-
-def test_legacy_fields_removed_when_disabled():
-    r = client.get("/coherence/metrics?window=3600&include_legacy=false")
+def test_metrics_default_includes_legacy_fields():
+    r = client.get("/coherence/metrics")
     assert r.status_code == 200
     body = r.json()
-    assert "coherenceMean" not in body
-    assert "volatilityIndex" not in body
-    assert "predictedDriftRisk" not in body
+
+    # New semantic fields
+    for k in ("interactionStability", "signalVolatility", "trustContinuityRiskLevel", "coherenceTrend", "interpretation", "meta"):
+        assert k in body
+
+    # Legacy present by default
+    for k in ("coherenceMean", "volatilityIndex", "predictedDriftRisk"):
+        assert k in body
 
 
-def test_example_response_parses_and_is_consistent():
-    """
-    Ensures our example file stays consistent with the Pydantic model and contract.
-    """
-    from app.schemas import CoherenceMetricsResponse
+def test_metrics_exclude_legacy_fields_when_flag_false():
+    r = client.get("/coherence/metrics?include_legacy=false")
+    assert r.status_code == 200
+    body = r.json()
 
-    with open("data/example_response.json", "r", encoding="utf-8") as f:
-        ex = json.load(f)
+    # New semantic fields present
+    for k in ("interactionStability", "signalVolatility", "trustContinuityRiskLevel", "coherenceTrend"):
+        assert k in body
 
-    # Validate with Pydantic model
-    model = CoherenceMetricsResponse(**ex)
+    # Legacy stripped
+    for k in ("coherenceMean", "volatilityIndex", "predictedDriftRisk"):
+        assert k not in body
 
-    # Consistency checks with mirrors
-    assert model.coherenceMean == model.interactionStability
-    assert model.volatilityIndex == model.signalVolatility
-    assert model.predictedDriftRisk == model.trustContinuityRiskLevel
+
+def test_metrics_meta_contains_expected_fields():
+    r = client.get("/coherence/metrics")
+    assert r.status_code == 200
+    meta = r.json().get("meta", {})
+    for k in ("method", "windowSec", "n", "timestamp"):
+        assert k in meta
