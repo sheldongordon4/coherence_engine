@@ -28,3 +28,4 @@ pytest-httpx
 # Code Quality
 black
 pylint
+
