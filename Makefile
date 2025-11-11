@@ -6,10 +6,12 @@ VENV := .venv
 ACTIVATE := . $(VENV)/bin/activate;
 APP_HOST := 0.0.0.0
 APP_PORT := 8000
-ENV_EXAMPLE := .env.example
+APP_MODULE := app.api:app
 ENV_FILE := .env
+ENV_EXAMPLE := .env.example
+INCIDENTS_DIR := artifacts/incidents
 
-# Persistence (unchanged)
+# Persistence (defaults; override in .env if needed)
 export PERSISTENCE ?= csv
 export CSV_PATH ?= rolling_store.csv
 export SQLITE_PATH ?= rolling_store.db
@@ -17,43 +19,48 @@ export SQLITE_PATH ?= rolling_store.db
 # Phase 2 runtime switch
 export COHERENCE_MODE ?= demo   # demo | production
 
-.PHONY: help venv install env dev api ui test fmt lint metrics metrics_new metrics_legacy health status ingest clean docker-build docker-run
+.PHONY: help venv install env api ui test fmt lint metrics metrics_new metrics_legacy \
+        health status ingest automation-drift automation-demo incidents-dir \
+        docker-build docker-run clean
 
 help:
-	@echo "Targets:"
-	@echo "  venv            - create virtual env"
-	@echo "  install         - install deps"
-	@echo "  env             - ensure .env exists (adds COHERENCE_MODE if missing)"
-	@echo "  dev / api       - run FastAPI locally (uvicorn)"
-	@echo "  ui              - run Streamlit verification app"
-	@echo "  test            - run pytest"
-	@echo "  fmt             - format with black & isort (if present)"
-	@echo "  lint            - lint with flake8 (if present)"
-	@echo "  metrics         - GET /coherence/metrics (default window)"
-	@echo "  metrics_new     - metrics with include_legacy=false"
-	@echo "  metrics_legacy  - metrics with include_legacy=true"
-	@echo "  health/status   - hit service health and status endpoints"
-	@echo "  ingest          - trigger one-off ingest (if implemented)"
-	@echo "  docker-build    - build container image"
-	@echo "  docker-run      - run container (maps 8000)"
-	@echo "  clean           - remove venv and caches"
+	@echo "Available targets:"
+	@echo "  venv               - Create virtual environment"
+	@echo "  install            - Install dependencies"
+	@echo "  env                - Ensure .env exists and Phase-2 vars present"
+	@echo "  api                - Run FastAPI backend"
+	@echo "  ui                 - Run Streamlit dashboard"
+	@echo "  metrics[_new|_legacy] - Query /coherence/metrics"
+	@echo "  health | status    - Quick diagnostics"
+	@echo "  automation-drift   - Emit a trust_continuity_alert (writes JSON)"
+	@echo "  automation-demo    - Faster demo (1h window, low threshold)"
+	@echo "  docker-build/run   - Build and run container"
+	@echo "  test | fmt | lint  - QA tooling"
+	@echo "  clean              - Remove venv and caches"
 
 venv:
 	@test -d $(VENV) || $(PY) -m venv $(VENV)
-	@echo "✅ venv ready: $(VENV)"
+	@echo "✅ Virtual environment ready."
 
 install: venv
 	$(ACTIVATE) pip install --upgrade pip
 	$(ACTIVATE) pip install -r requirements.txt
-	@echo "✅ dependencies installed"
+	@echo "✅ Dependencies installed."
 
 env:
-	@test -f $(ENV_FILE) || (cp $(ENV_EXAMPLE) $(ENV_FILE) && echo "Created $(ENV_FILE) from $(ENV_EXAMPLE)")
+	@test -f $(ENV_FILE) || (test -f $(ENV_EXAMPLE) && cp $(ENV_EXAMPLE) $(ENV_FILE) || touch $(ENV_FILE); echo "Created $(ENV_FILE)")
 	@grep -q '^COHERENCE_MODE=' $(ENV_FILE) || echo 'COHERENCE_MODE=$(COHERENCE_MODE)' >> $(ENV_FILE)
+	@grep -q '^COHERENCE_WARN_THRESHOLD=' $(ENV_FILE) || echo 'COHERENCE_WARN_THRESHOLD=0.10' >> $(ENV_FILE)
+	@grep -q '^COHERENCE_CRITICAL_THRESHOLD=' $(ENV_FILE) || echo 'COHERENCE_CRITICAL_THRESHOLD=0.25' >> $(ENV_FILE)
+	@grep -q '^TREND_SENSITIVITY=' $(ENV_FILE) || echo 'TREND_SENSITIVITY=0.03' >> $(ENV_FILE)
+	@grep -q '^STABILITY_HIGH_MIN=' $(ENV_FILE) || echo 'STABILITY_HIGH_MIN=0.80' >> $(ENV_FILE)
+	@grep -q '^STABILITY_MEDIUM_MIN=' $(ENV_FILE) || echo 'STABILITY_MEDIUM_MIN=0.55' >> $(ENV_FILE)
+	@grep -q '^UI_REFRESH_MS=' $(ENV_FILE) || echo 'UI_REFRESH_MS=3000' >> $(ENV_FILE)
+	@grep -q '^API_BASE=' $(ENV_FILE) || echo 'API_BASE=http://localhost:8000' >> $(ENV_FILE)
 	@echo "🔧 $(ENV_FILE) ready (COHERENCE_MODE=$${COHERENCE_MODE})"
 
-dev api:
-	$(ACTIVATE) uvicorn app.api:app --host $(APP_HOST) --port $(APP_PORT) --reload
+api:
+	$(ACTIVATE) uvicorn $(APP_MODULE) --host $(APP_HOST) --port $(APP_PORT) --reload
 
 ui:
 	$(ACTIVATE) streamlit run streamlit_app/app.py
@@ -78,23 +85,34 @@ metrics_new:
 metrics_legacy:
 	curl -s "http://localhost:$(APP_PORT)/coherence/metrics?include_legacy=true" | $(PY) -m json.tool
 
-# Existing utilities (kept)
+# Utility endpoints
 health:
-	curl -s http://localhost:$(APP_PORT)/health | $(PY) -m json.tool
+	curl -s "http://localhost:$(APP_PORT)/health" | $(PY) -m json.tool
 
 status:
-	curl -s http://localhost:$(APP_PORT)/status | $(PY) -m json.tool
+	curl -s "http://localhost:$(APP_PORT)/status" | $(PY) -m json.tool
 
+# Optional - only if you expose an ingest endpoint
 ingest:
 	curl -s "http://localhost:$(APP_PORT)/ingest/run" | $(PY) -m json.tool
 
-# Docker helpers (optional)
+# === Automation: write ledger-ready incidents ===
+incidents-dir:
+	mkdir -p $(INCIDENTS_DIR)
+
+automation-drift: incidents-dir
+	$(ACTIVATE) python -m automation.drift_sentry --window 24h --min-level medium
+
+automation-demo: incidents-dir
+	$(ACTIVATE) python -m automation.drift_sentry --window 1h --min-level low
+
+# === Docker helpers ===
 docker-build:
 	docker build -t coherence-engine:latest .
 
 docker-run:
-	docker run --rm -p 8000:8000 --env-file $(ENV_FILE) coherence-engine:latest
+	docker run --rm -p 8000:8000 --env-file $(ENV_FILE) -v "$$(pwd)/artifacts:/${INCIDENTS_DIR}" coherence-engine:latest
 
 clean:
 	rm -rf $(VENV) __pycache__ .pytest_cache .mypy_cache .coverage **/*.pyc
-	@echo "🧹 cleaned"
+	@echo "🧹 Clean complete."

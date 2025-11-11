@@ -1,192 +1,148 @@
 # streamlit_app/pages/01_Incidents.py
-import os
-import json
-import glob
-from datetime import datetime
-from typing import List, Dict, Any, Optional
+from __future__ import annotations
 
-import pandas as pd
+import json
+import os
+from pathlib import Path
+from typing import Dict, List, Any, Tuple, Optional
+from datetime import datetime, timezone
+
 import streamlit as st
 
+# --- Config / paths ---
+INCIDENTS_DIR = Path("artifacts/incidents")
+MODE = os.getenv("COHERENCE_MODE", "demo")
+REFRESH_MS = int(os.getenv("UI_REFRESH_MS", "3000"))
 
-# ----------------- Config ----------------- #
-MODE = os.getenv("COHERENCE_MODE", "demo").strip().lower()
-INCIDENT_DIR = os.getenv("INCIDENT_DIR", "artifacts/incidents")
+# --- Optional auto-refresh (won't error if package missing) ---
+try:
+    # pip install streamlit-autorefresh (optional)
+    from streamlit_autorefresh import st_autorefresh  # type: ignore
 
-REFRESH_SEC = 3 if MODE == "demo" else 15
+    if MODE == "demo":
+        st_autorefresh(interval=REFRESH_MS, key="trust_alerts_auto")
+except Exception:
+    # No autorefresh — safe to continue without it
+    pass
+
 st.set_page_config(page_title="Trust Continuity Alerts", layout="wide")
 
+# ==== Helpers (modern caching) ====
+@st.cache_data(show_spinner=False)
+def list_incident_files(directory: Path) -> List[Path]:
+    if not directory.exists():
+        return []
+    files = sorted(directory.glob("*.json"))
+    return files
 
-# ----------------- Helpers ----------------- #
-def _iso_to_dt(s: str) -> Optional[datetime]:
-    if not s:
-        return None
+@st.cache_data(show_spinner=False)
+def load_incident(path: Path) -> Optional[Dict[str, Any]]:
     try:
-        # accept either ...Z or +00:00
-        s = s.replace("Z", "+00:00") if s.endswith("Z") else s
-        return datetime.fromisoformat(s)
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
         return None
 
+@st.cache_data(show_spinner=False)
+def load_all_incidents(directory: Path) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    for p in list_incident_files(directory):
+        obj = load_incident(p)
+        if obj:
+            items.append(obj)
+    return items
 
-def _level_color(level: str) -> str:
-    lvl = (level or "").lower()
-    if lvl == "high":
-        return "🔴"
-    if lvl == "medium":
-        return "🟠"
-    return "🟢"
-
-
-def _read_incident(path: str) -> Optional[Dict[str, Any]]:
+def parse_timestamp(ts: str) -> Optional[datetime]:
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            obj = json.load(f)
-        # Expect Phase 2 schema
-        return {
-            "event": obj.get("event"),
-            "timestamp": obj.get("timestamp"),
-            "window": obj.get("window"),
-            "signalStability": obj.get("signalStability"),
-            "signalLiquidity": obj.get("signalLiquidity"),
-            "trustContinuityRisk": obj.get("trustContinuityRisk"),
-            "trace_source": (obj.get("trace") or {}).get("source"),
-            "trace_upstream": (obj.get("trace") or {}).get("upstream"),
-            "_raw": obj,
-            "_path": path,
-        }
+        # Support both "timestamp" and older "created_at"
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
     except Exception:
         return None
 
+def summarize_alerts(incidents: List[Dict[str, Any]]) -> Tuple[int, int, int, Optional[datetime]]:
+    total = 0
+    hi = 0
+    med = 0
+    last_dt: Optional[datetime] = None
 
-def load_incidents() -> pd.DataFrame:
-    os.makedirs(INCIDENT_DIR, exist_ok=True)
-    files = sorted(glob.glob(os.path.join(INCIDENT_DIR, "*.json")))
-    rows: List[Dict[str, Any]] = []
-    for p in files:
-        rec = _read_incident(p)
-        if rec:
-            rows.append(rec)
-    if not rows:
-        return pd.DataFrame(
-            columns=[
-                "event",
-                "timestamp",
-                "window",
-                "signalStability",
-                "signalLiquidity",
-                "trustContinuityRisk",
-                "trace_source",
-                "trace_upstream",
-                "_raw",
-                "_path",
-            ]
+    for inc in incidents:
+        # Phase-2 schema fields
+        risk = (
+            inc.get("trustContinuityRisk")
+            or inc.get("trustContinuityRiskLevel")
+            or inc.get("trustContinuityRisk_level")
         )
-    df = pd.DataFrame(rows)
-    # enrich
-    df["dt"] = df["timestamp"].apply(_iso_to_dt)
-    df["risk_icon"] = df["trustContinuityRisk"].apply(_level_color)
-    df = df.sort_values("dt").reset_index(drop=True)
-    return df
+        ts = inc.get("timestamp") or inc.get("created_at")
+        dt = parse_timestamp(ts) if ts else None
 
+        total += 1
+        if isinstance(risk, str):
+            r = risk.lower()
+            if r == "high":
+                hi += 1
+            elif r == "medium":
+                med += 1
 
-# ----------------- UI ----------------- #
+        if dt:
+            last_dt = max(last_dt, dt) if last_dt else dt
+
+    return total, hi, med, last_dt
+
+# ==== UI ====
 st.title("Trust Continuity Alerts")
-st.caption(
-    "Ledger-ready incidents emitted by the Coherence Engine. "
-    "Fields: signalStability, signalLiquidity, trustContinuityRisk, window, trace."
-)
+st.caption("Ledger-ready incidents emitted by the Coherence Engine. Fields: signalStability, signalLiquidity, trustContinuityRisk, window, trace.")
 
-# Auto-refresh note
-st.sidebar.write(f"**Mode:** `{MODE}`")
-st.sidebar.write(f"**Auto-refresh:** every `{REFRESH_SEC}s`")
-st.sidebar.write(f"**Incident dir:** `{INCIDENT_DIR}`")
-
-# Filters
-df = load_incidents()
-all_windows = sorted([w for w in df["window"].dropna().unique().tolist()]) if not df.empty else []
-all_levels = ["low", "medium", "high"]
-
-with st.sidebar:
-    risk_sel = st.multiselect("Risk level", all_levels, default=all_levels)
-    win_sel = st.multiselect("Window", all_windows, default=all_windows)
-
-# Apply filters
-if not df.empty:
-    if risk_sel:
-        df = df[df["trustContinuityRisk"].str.lower().isin([r.lower() for r in risk_sel])]
-    if win_sel:
-        df = df[df["window"].isin(win_sel)]
+incidents = load_all_incidents(INCIDENTS_DIR)
+total, high, medium, last_dt = summarize_alerts(incidents)
 
 # KPIs
-col1, col2, col3, col4 = st.columns(4)
-total = len(df)
-high_ct = int((df["trustContinuityRisk"].str.lower() == "high").sum()) if total else 0
-med_ct = int((df["trustContinuityRisk"].str.lower() == "medium").sum()) if total else 0
-low_ct = int((df["trustContinuityRisk"].str.lower() == "low").sum()) if total else 0
-last_ts = df["dt"].max().isoformat() if total and df["dt"].notna().any() else "—"
-
-col1.metric("Total Alerts", total)
-col2.metric("High", high_ct)
-col3.metric("Medium", med_ct)
-col4.metric("Last Alert (UTC)", last_ts.replace("+00:00", "Z") if last_ts != "—" else "—")
+c1, c2, c3, c4 = st.columns([1, 1, 1, 1.2])
+with c1:
+    st.metric("Total Alerts", total)
+with c2:
+    st.metric("High", high)
+with c3:
+    st.metric("Medium", medium)
+with c4:
+    st.metric("Last Alert (UTC)", last_dt.isoformat().replace("+00:00", "Z") if last_dt else "—")
 
 st.divider()
 
-# Table
-if df.empty:
+# Header note per Phase-2 naming
+st.markdown("**Labels per Phase-2:** Signal **Stability**, Signal **Liquidity**, **Trust Continuity Risk**.")
+
+if not incidents:
     st.info("No incidents found yet. When incidents are emitted, they will appear here.")
 else:
-    show_cols = [
-        "risk_icon",
-        "trustContinuityRisk",
-        "window",
-        "signalStability",
-        "signalLiquidity",
-        "timestamp",
-        "trace_source",
-        "trace_upstream",
-        "_path",
-    ]
-    pretty = df[show_cols].rename(
-        columns={
-            "risk_icon": "",
-            "trustContinuityRisk": "Risk",
-            "window": "Window",
-            "signalStability": "Signal Stability",
-            "signalLiquidity": "Signal Liquidity",
-            "timestamp": "Timestamp",
-            "trace_source": "Source",
-            "trace_upstream": "Upstream",
-            "_path": "File",
-        }
-    )
-    st.dataframe(
-        pretty,
-        hide_index=True,
-        use_container_width=True,
-    )
+    # Sort newest first by timestamp
+    def sort_key(i: Dict[str, Any]) -> float:
+        ts = i.get("timestamp") or i.get("created_at")
+        dt = parse_timestamp(ts) if ts else None
+        return dt.timestamp() if dt else 0.0
 
-    # Details expander for the latest incident
-    with st.expander("Latest incident details (raw JSON)"):
-        latest = df.iloc[-1]
-        st.json(latest["_raw"], expanded=False)
+    incidents_sorted = sorted(incidents, key=sort_key, reverse=True)
 
-    # Download CSV
-    csv_bytes = pretty.to_csv(index=False).encode("utf-8")
-    st.download_button("Download as CSV", data=csv_bytes, file_name="trust_continuity_alerts.csv", mime="text/csv")
+    for inc in incidents_sorted:
+        with st.container(border=True):
+            event = inc.get("event", "trust_continuity_alert")
+            ts = inc.get("timestamp") or inc.get("created_at") or "—"
+            window = inc.get("window", "—")
+            stability = inc.get("signalStability", inc.get("interactionStability", "—"))
+            liquidity = inc.get("signalLiquidity", inc.get("signalVolatility", "—"))
+            risk = inc.get("trustContinuityRisk", inc.get("trustContinuityRiskLevel", "—"))
+            trace = inc.get("trace", {})
 
-# Footer + auto-refresh
-st.caption("Labels per Phase-2: **Signal Stability**, **Signal Liquidity**, **Trust Continuity Risk**.")
-st.experimental_singleton.clear()  # no-op safety on older Streamlit; harmless if unsupported
-st_autorefresh = st.empty()
-st_autorefresh.write(f"Auto-refreshing every **{REFRESH_SEC}s**…")
-st.experimental_rerun() if st.runtime.exists() and False else None  # placeholder; we rely on Streamlit's built-in Rerun button
+            left, right = st.columns([2, 1])
+            with left:
+                st.subheader(event.replace("_", " ").title())
+                st.write(f"**Timestamp (UTC):** {ts}")
+                st.write(f"**Window:** {window}")
+                st.write(f"**Signal Stability:** {stability}")
+                st.write(f"**Signal Liquidity:** {liquidity}")
+                st.write(f"**Trust Continuity Risk:** {risk}")
+            with right:
+                st.caption("Trace")
+                st.json(trace, expanded=False)
 
-# Use Streamlit native autorefresh if available
-try:
-    from streamlit_autorefresh import st_autorefresh as _auto
-    _auto(interval=REFRESH_SEC * 1000, limit=None, key="auto_refresh_incidents")
-except Exception:
-    # Fallback: suggest manual refresh
-    pass
+    st.divider()
+    st.caption(f"Source folder: `{INCIDENTS_DIR}` · Mode: `{MODE}`")
