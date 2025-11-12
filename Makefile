@@ -40,12 +40,12 @@ help:
 
 venv:
 	@test -d $(VENV) || $(PY) -m venv $(VENV)
-	@echo "✅ Virtual environment ready."
+	@echo "Virtual environment ready."
 
 install: venv
 	$(ACTIVATE) pip install --upgrade pip
 	$(ACTIVATE) pip install -r requirements.txt
-	@echo "✅ Dependencies installed."
+	@echo "Dependencies installed."
 
 env:
 	@test -f $(ENV_FILE) || (test -f $(ENV_EXAMPLE) && cp $(ENV_EXAMPLE) $(ENV_FILE) || touch $(ENV_FILE); echo "Created $(ENV_FILE)")
@@ -57,7 +57,7 @@ env:
 	@grep -q '^STABILITY_MEDIUM_MIN=' $(ENV_FILE) || echo 'STABILITY_MEDIUM_MIN=0.55' >> $(ENV_FILE)
 	@grep -q '^UI_REFRESH_MS=' $(ENV_FILE) || echo 'UI_REFRESH_MS=3000' >> $(ENV_FILE)
 	@grep -q '^API_BASE=' $(ENV_FILE) || echo 'API_BASE=http://localhost:8000' >> $(ENV_FILE)
-	@echo "🔧 $(ENV_FILE) ready (COHERENCE_MODE=$${COHERENCE_MODE})"
+	@echo "$(ENV_FILE) ready (COHERENCE_MODE=$${COHERENCE_MODE})"
 
 api:
 	$(ACTIVATE) uvicorn $(APP_MODULE) --host $(APP_HOST) --port $(APP_PORT) --reload
@@ -115,4 +115,4 @@ docker-run:
 
 clean:
 	rm -rf $(VENV) __pycache__ .pytest_cache .mypy_cache .coverage **/*.pyc
-	@echo "🧹 Clean complete."
+	@echo "Clean complete."
