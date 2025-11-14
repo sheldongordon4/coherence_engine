@@ -3,116 +3,142 @@
 SHELL := /bin/bash
 PY := $(shell command -v python3 || command -v python)
 VENV := .venv
-ACTIVATE := . $(VENV)/bin/activate;
+VENV_BIN := $(VENV)/bin
+PIP := $(VENV_BIN)/pip
+PYTHON := $(VENV_BIN)/python
+
 APP_HOST := 0.0.0.0
 APP_PORT := 8000
 APP_MODULE := app.api:app
+
 ENV_FILE := .env
 ENV_EXAMPLE := .env.example
-INCIDENTS_DIR := artifacts/incidents
+INCIDENTS_DIR := /app/artifacts
+DOCKER_IMAGE := coherence-engine:latest
 
-# Persistence (defaults; override in .env if needed)
-export PERSISTENCE ?= csv
-export CSV_PATH ?= rolling_store.csv
-export SQLITE_PATH ?= rolling_store.db
+.DEFAULT_GOAL := help
 
-# Phase 2 runtime switch
-export COHERENCE_MODE ?= demo   # demo | production
+# -------------------------
+# Helpers
+# -------------------------
 
-.PHONY: help venv install env api ui test fmt lint metrics metrics_new metrics_legacy \
-        health status ingest automation-drift automation-demo incidents-dir \
-        docker-build docker-run clean
+$(ENV_FILE):
+	@echo "[make] Creating $(ENV_FILE) with default coherence settings"
+	@echo "COHERENCE_MODE=demo" > $(ENV_FILE)
+	@echo "COHERENCE_WARN_THRESHOLD=0.10" >> $(ENV_FILE)
+	@echo "COHERENCE_CRITICAL_THRESHOLD=0.25" >> $(ENV_FILE)
+	@echo "TREND_SENSITIVITY=0.02" >> $(ENV_FILE)
+	@echo "STABILITY_HIGH_MIN=0.80" >> $(ENV_FILE)
+	@echo "STABILITY_MEDIUM_MIN=0.55" >> $(ENV_FILE)
+	@echo "UI_REFRESH_MS=3000" >> $(ENV_FILE)
+	@echo "API_BASE=http://$(APP_HOST):$(APP_PORT)" >> $(ENV_FILE)
+	@echo "[make] Wrote defaults to $(ENV_FILE)"
+
+# Create venv + install deps if needed
+$(VENV): requirements.txt
+	@echo "[make] Creating virtualenv at $(VENV)"
+	@$(PY) -m venv $(VENV)
+	@echo "[make] Installing dependencies"
+	@. $(VENV_BIN)/activate; pip install -r requirements.txt
+
+# -------------------------
+# Core dev targets
+# -------------------------
 
 help:
 	@echo "Available targets:"
-	@echo "  venv               - Create virtual environment"
-	@echo "  install            - Install dependencies"
-	@echo "  env                - Ensure .env exists and Phase-2 vars present"
-	@echo "  api                - Run FastAPI backend"
-	@echo "  ui                 - Run Streamlit dashboard"
-	@echo "  metrics[_new|_legacy] - Query /coherence/metrics"
-	@echo "  health | status    - Quick diagnostics"
-	@echo "  automation-drift   - Emit a trust_continuity_alert (writes JSON)"
-	@echo "  automation-demo    - Faster demo (1h window, low threshold)"
-	@echo "  docker-build/run   - Build and run container"
-	@echo "  test | fmt | lint  - QA tooling"
-	@echo "  clean              - Remove venv and caches"
+	@grep -E '^[a-zA-Z0-9_-]+:.*$$' Makefile | sed 's/:.*//' | sort -u
 
-venv:
-	@test -d $(VENV) || $(PY) -m venv $(VENV)
-	@echo "Virtual environment ready."
+venv: $(VENV)
 
-install: venv
-	$(ACTIVATE) pip install --upgrade pip
-	$(ACTIVATE) pip install -r requirements.txt
-	@echo "Dependencies installed."
+env: $(ENV_FILE)
 
-env:
-	@test -f $(ENV_FILE) || (test -f $(ENV_EXAMPLE) && cp $(ENV_EXAMPLE) $(ENV_FILE) || touch $(ENV_FILE); echo "Created $(ENV_FILE)")
-	@grep -q '^COHERENCE_MODE=' $(ENV_FILE) || echo 'COHERENCE_MODE=$(COHERENCE_MODE)' >> $(ENV_FILE)
-	@grep -q '^COHERENCE_WARN_THRESHOLD=' $(ENV_FILE) || echo 'COHERENCE_WARN_THRESHOLD=0.10' >> $(ENV_FILE)
-	@grep -q '^COHERENCE_CRITICAL_THRESHOLD=' $(ENV_FILE) || echo 'COHERENCE_CRITICAL_THRESHOLD=0.25' >> $(ENV_FILE)
-	@grep -q '^TREND_SENSITIVITY=' $(ENV_FILE) || echo 'TREND_SENSITIVITY=0.03' >> $(ENV_FILE)
-	@grep -q '^STABILITY_HIGH_MIN=' $(ENV_FILE) || echo 'STABILITY_HIGH_MIN=0.80' >> $(ENV_FILE)
-	@grep -q '^STABILITY_MEDIUM_MIN=' $(ENV_FILE) || echo 'STABILITY_MEDIUM_MIN=0.55' >> $(ENV_FILE)
-	@grep -q '^UI_REFRESH_MS=' $(ENV_FILE) || echo 'UI_REFRESH_MS=3000' >> $(ENV_FILE)
-	@grep -q '^API_BASE=' $(ENV_FILE) || echo 'API_BASE=http://localhost:8000' >> $(ENV_FILE)
-	@echo "$(ENV_FILE) ready (COHERENCE_MODE=$${COHERENCE_MODE})"
+test: $(ENV_FILE) $(VENV)
+	@echo "[make] Running tests"
+	@. $(VENV_BIN)/activate; pytest -q
 
-api:
-	$(ACTIVATE) uvicorn $(APP_MODULE) --host $(APP_HOST) --port $(APP_PORT) --reload
+fmt: $(VENV)
+	@echo "[make] Formatting with black"
+	@. $(VENV_BIN)/activate; black app automation streamlit_app tests
 
-ui:
-	$(ACTIVATE) streamlit run streamlit_app/app.py
+lint: $(VENV)
+	@echo "[make] Linting with pylint"
+	@. $(VENV_BIN)/activate; pylint app
 
-test:
-	$(ACTIVATE) pytest -q
+# -------------------------
+# API & UI
+# -------------------------
 
-fmt:
-	-$(ACTIVATE) black app tests
-	-$(ACTIVATE) isort app tests
+api: $(ENV_FILE) $(VENV)
+	@echo "[make] Starting FastAPI on $(APP_HOST):$(APP_PORT)"
+	@. $(VENV_BIN)/activate; uvicorn $(APP_MODULE) --host $(APP_HOST) --port $(APP_PORT) --reload
 
-lint:
-	-$(ACTIVATE) flake8 app
+ui: $(ENV_FILE) $(VENV)
+	@echo "[make] Starting Streamlit dashboard"
+	@. $(VENV_BIN)/activate; streamlit run streamlit_app/app.py
 
-# === Phase 2: semantic endpoints ===
+# -------------------------
+# Metrics & status helpers
+# -------------------------
+
 metrics:
-	curl -s "http://localhost:$(APP_PORT)/coherence/metrics" | $(PY) -m json.tool
+	@echo "[make] GET /coherence/metrics (default include_legacy=true)"
+	@curl -s "http://$(APP_HOST):$(APP_PORT)/coherence/metrics" | python -m json.tool
 
 metrics_new:
-	curl -s "http://localhost:$(APP_PORT)/coherence/metrics?include_legacy=false" | $(PY) -m json.tool
+	@echo "[make] GET /coherence/metrics?include_legacy=false"
+	@curl -s "http://$(APP_HOST):$(APP_PORT)/coherence/metrics?include_legacy=false" | python -m json.tool
 
 metrics_legacy:
-	curl -s "http://localhost:$(APP_PORT)/coherence/metrics?include_legacy=true" | $(PY) -m json.tool
+	@echo "[make] GET /coherence/metrics?include_legacy=true"
+	@curl -s "http://$(APP_HOST):$(APP_PORT)/coherence/metrics?include_legacy=true" | python -m json.tool
 
-# Utility endpoints
 health:
-	curl -s "http://localhost:$(APP_PORT)/health" | $(PY) -m json.tool
+	@echo "[make] GET /health"
+	@curl -s "http://$(APP_HOST):$(APP_PORT)/health" || true
+	@echo
 
 status:
-	curl -s "http://localhost:$(APP_PORT)/status" | $(PY) -m json.tool
+	@echo "[make] GET /status"
+	@curl -s "http://$(APP_HOST):$(APP_PORT)/status" | python -m json.tool || true
 
-# Optional - only if you expose an ingest endpoint
-ingest:
-	curl -s "http://localhost:$(APP_PORT)/ingest/run" | $(PY) -m json.tool
+# -------------------------
+# Automation / incidents
+# -------------------------
 
-# === Automation: write ledger-ready incidents ===
-incidents-dir:
-	mkdir -p $(INCIDENTS_DIR)
+automation-drift: $(ENV_FILE) $(VENV)
+	@echo "[make] Running drift_sentry once (24h window, low min-level)"
+	@. $(VENV_BIN)/activate; $(PYTHON) -m automation.drift_sentry --window 24h --min-level low
 
-automation-drift: incidents-dir
-	$(ACTIVATE) python -m automation.drift_sentry --window 24h --min-level medium
+automation-demo: $(ENV_FILE) $(VENV)
+	@echo "[make] Running drift_sentry in demo mode (1h window, low min-level, dry-run)"
+	@. $(VENV_BIN)/activate; $(PYTHON) -m automation.drift_sentry --window 1h --min-level low --dry-run
 
-automation-demo: incidents-dir
-	$(ACTIVATE) python -m automation.drift_sentry --window 1h --min-level low
+# -------------------------
+# Docker
+# -------------------------
 
-# === Docker helpers ===
 docker-build:
-	docker build -t coherence-engine:latest .
+	@echo "[make] Building docker image $(DOCKER_IMAGE)"
+	@docker build -t $(DOCKER_IMAGE) .
 
 docker-run:
-	docker run --rm -p 8000:8000 --env-file $(ENV_FILE) -v "$$(pwd)/artifacts:/${INCIDENTS_DIR}" coherence-engine:latest
+	@echo "[make] Running docker image $(DOCKER_IMAGE)"
+	@docker run --rm \
+		-p $(APP_PORT):8000 \
+		-e COHERENCE_MODE=demo \
+		-v "$$(pwd)/artifacts:$(INCIDENTS_DIR)" \
+		$(DOCKER_IMAGE)
+
+# -------------------------
+# Cleanup
+# -------------------------
 
 clean:
-	rm -rf $(VENV) __pycache__ .pytest_cache .mypy_cache .coverage **/*.pyc
-	@echo "Clean complete."
+	@echo "[make] Cleaning venv, caches, and incident JSON"
+	@rm -rf $(VENV) .pytest_cache __pycache__
+	@find app automation streamlit_app tests -name '__pycache__' -type d -exec rm -rf {} +
+	@rm -f artifacts/incidents/*.json || true
+
+.PHONY: help venv env test fmt lint api ui metrics metrics_new metrics_legacy health status \
+        automation-drift automation-demo docker-build docker-run clean

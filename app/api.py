@@ -17,11 +17,19 @@ app = FastAPI(title="Coherence Engine API", version="0.2.0")
 router = APIRouter()
 
 # --- Main metrics endpoint ---
-@router.get("/coherence/metrics", response_model=CoherenceMetricsResponse)
+@router.get(
+    "/coherence/metrics",
+    response_model=CoherenceMetricsResponse,
+    response_model_exclude_none=True,
+)
 def get_metrics(
     window: int = Query(86400, description="Window in seconds"),
-    include_legacy: bool = Query(True, description="Return deprecated fields for backward compatibility"),
+    include_legacy: bool = Query(
+        True,
+        description="Return deprecated fields for backward compatibility",
+    ),
 ):
+
     series = load_series(window)
     payload = compute_metrics(series, window_sec=window)
 

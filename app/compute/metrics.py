@@ -1,5 +1,13 @@
 from typing import List, Dict, Any
 from statistics import mean, pstdev
+import os
+
+# --- Thresholds from environment (Phase 2.1 externalization) ---
+STABILITY_HIGH_MIN = float(os.getenv("STABILITY_HIGH_MIN", "0.80"))
+STABILITY_MEDIUM_MIN = float(os.getenv("STABILITY_MEDIUM_MIN", "0.55"))
+
+COHERENCE_WARN_THRESHOLD = float(os.getenv("COHERENCE_WARN_THRESHOLD", "0.10"))
+COHERENCE_CRITICAL_THRESHOLD = float(os.getenv("COHERENCE_CRITICAL_THRESHOLD", "0.25"))
 
 
 def _rolling_mean(values: List[float]) -> float:
@@ -43,10 +51,14 @@ def _risk_from_liquidity(liq: float) -> str:
     """
     Coarse risk band derived from normalized volatility (aka signal volatility/liquidity).
     Returns one of: "low", "medium", "high".
+
+    Uses env-driven thresholds:
+      COHERENCE_WARN_THRESHOLD
+      COHERENCE_CRITICAL_THRESHOLD
     """
-    if liq < 0.10:
+    if liq < COHERENCE_WARN_THRESHOLD:
         return "low"
-    if liq < 0.25:
+    if liq < COHERENCE_CRITICAL_THRESHOLD:
         return "medium"
     return "high"
 
@@ -55,23 +67,23 @@ def compute_metrics(series: List[float], window_sec: int) -> Dict[str, Any]:
     """
     Phase 2 API contract (exact field names):
 
-      interactionStability        : float (rolling mean)
-      signalVolatility            : float (normalized stdev/mean)
-      trustContinuityRiskLevel    : "low" | "medium" | "high"
-      coherenceTrend              : "Improving" | "Steady" | "Deteriorating"
+    interactionStability       : float (rolling mean)
+    signalVolatility           : float (normalized stdev/mean)
+    trustContinuityRiskLevel   : "low" | "medium" | "high"
+    coherenceTrend             : "Improving" | "Steady" | "Deteriorating"
 
-      interpretation: {
+    interpretation: {
         stability        : "High" | "Medium" | "Low"
         trustContinuity  : "Stable" | "At Risk" | "Critical"
         coherenceTrend   : (same as top-level)
-      }
+    }
 
-      meta: {
-        method           : "rolling mean/stdev; half-window trend"
-        windowSec        : int
-        n                : int
-        timestamp        : str (ISO8601)  # to be set by API layer
-      }
+    meta: {
+        method     : "rolling mean/stdev; half-window trend"
+        windowSec  : int
+        n          : int
+        timestamp  : str (ISO8601)  # set by API layer
+    }
 
     Legacy mirrors (only when include_legacy=true):
       coherenceMean, volatilityIndex, predictedDriftRisk
@@ -81,8 +93,14 @@ def compute_metrics(series: List[float], window_sec: int) -> Dict[str, Any]:
     risk = _risk_from_liquidity(liquidity)
     trend = _trend_label(series)
 
-    # Lightweight interpretation layer
-    stability_band = "High" if stability >= 0.80 else "Medium" if stability >= 0.55 else "Low"
+    # Lightweight interpretation layer (using env thresholds)
+    stability_band = (
+        "High"
+        if stability >= STABILITY_HIGH_MIN
+        else "Medium"
+        if stability >= STABILITY_MEDIUM_MIN
+        else "Low"
+    )
     trust_band = "Stable" if risk == "low" else ("At Risk" if risk == "medium" else "Critical")
 
     payload: Dict[str, Any] = {
